@@ -1,5 +1,11 @@
 # Murder Mustery 2
 this This script has a lot of cool features, Use it but don't harm other players.
+<!-- PROJECT LOGO -->
+<br />
+<p align="center">
+  </a>
+   <img src="https://github.com/DaEpicSwag/funni/blob/main/D7C73976-6EF8-4205-A31D-899FC0E92229.gif" alt="Logo" width="200" height="200">
+  </a>
 
 <!-- How to use -->
 ## How to use 
@@ -9,7 +15,10 @@ After that, look for the features you need and enable them!
 <!-- CONTACT -->
 ## Contact
 
-Telegram profile - [RUNEX](https://t.me/RUNEXscript)
-Telegram chanel [RUNEX SCRIPT](https://t.me/RUNEX_X_SCRIPT)
-
-
+   <a href="https://github.com/DaEpicSwag/Roblox-Cookie-Logger">View Demo</a>
+    ·
+    <a href="https://github.com/DaEpicSwag/Roblox-Cookie-Logger/issues">Report Bug</a>
+    ·
+    <a href="https://github.com/DaEpicSwag/Roblox-Cookie-Logger/issues">Request Feature</a>
+  </p>
+</p>
