@@ -15,10 +15,10 @@ After that, look for the features you need and enable them!
 <!-- CONTACT -->
 ## Contact
 [Bug Report](https://t.me/RUNEXbugReportbot)
-    ·
+    •
 [Telegram Channel](https://t.me/RUNEX_X_SCRIPT)
     
 [Developer Profile](https://t.me/RUNEXscript)
       •
-[Developer 2 Profile](hhtps://t.me/KFS_sigma)
+[Developer 2 Profile](https://t.me/KFS_sigma)
 
