@@ -20,5 +20,4 @@ After that, look for the features you need and enable them!
     
   
   <a href="https://t.me/RUNEXscript">Developer profile</a>
-  </p>
-</p>
+
