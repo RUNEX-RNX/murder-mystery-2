@@ -1,4 +1,4 @@
-# Murder Mustery 2
+# LoL script
 this This script has a lot of cool features, Use it but don't harm other players.
 <!-- PROJECT LOGO -->
 <br />
