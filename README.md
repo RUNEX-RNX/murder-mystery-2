@@ -15,8 +15,10 @@ After that, look for the features you need and enable them!
 <!-- CONTACT -->
 ## Contact
 
-  <a href="https://github.com/DaEpicSwag/Roblox-Cookie-Logger/issues">Report Bug</a>
+  <a href="http://t.me/RUNEXbugReportbot">Report Bug</a>
     ·
-    <a href="https://t.me/RUNEX_X_SCRIPT">Telegram chanel</a>
+    <a href="t.me/RUNEX_X_SCRIPT">Telegram chanel</a>
+    ·
+    <a href="t.me/RUNEXscript">Telegram profile</a>
   </p>
 </p>
