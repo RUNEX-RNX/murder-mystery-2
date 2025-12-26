@@ -19,6 +19,6 @@ After that, look for the features you need and enable them!
     <a href="https://t.me/RUNEX_X_SCRIPT">Telegram chanel</a>
     
   
-  <a href="https://t.me/RUNEXscript">Telegram profile</a>
+  <a href="https://t.me/RUNEXscript">Developer profile</a>
   </p>
 </p>
