@@ -1,9 +1,6 @@
 # Murder Mustery 2
 this This script has a lot of cool features, Use it, but don't harm other players.
-
-href="t.me/RUNEX_X_SCRIPT">Join Chanel</a>
-    ·
-    <a href="https://github.com/DaEpicSwag/Roblox-Cookie-Logger/issues">Report Bug</a>
+    <a href="t.me/RUNEX_X_SCRIPT">Join Chanel</a>
     ·
     <a href="https://github.com/DaEpicSwag/Roblox-Cookie-Logger/issues">Request Feature</a>
   </p>
