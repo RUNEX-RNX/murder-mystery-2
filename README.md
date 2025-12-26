@@ -9,7 +9,7 @@ After that, look for the features you need and enable them!
 <!-- CONTACT -->
 ## Contact
 
-Telegram profile - [RUNEX](t.me/RUNEXscript
+Telegram profile - [RUNEX](t.me/RUNEXscript)
 Telegram chanel [RUNEX SCRIPT](t.me/RUNEX_X_SCRIPT)
 
 
