@@ -14,11 +14,10 @@ After that, look for the features you need and enable them!
 
 <!-- CONTACT -->
 ## Contact
-
-  <a href="http://t.me/RUNEXbugReportbot">Report Bug</a>
+ <a href="http://t.me/RUNEXbugReportbot">Bug Report</a>
     ·
-    <a href="t.me/RUNEX_X_SCRIPT">Telegram chanel</a>
+    <a href="https://t.me/RUNEX_X_SCRIPT">Telegram chanel</a>
     ·
-    <a href="t.me/RUNEXscript">Telegram profile</a>
+    <a href="https://t.me/RUNEXscript">Telegram profile</a>
   </p>
 </p>
