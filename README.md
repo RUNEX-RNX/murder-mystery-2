@@ -1,4 +1,4 @@
-# All MM2 Skins
+# Murder mystery 2
 scripts murder mystery 2
 
 <!-- How to use -->
