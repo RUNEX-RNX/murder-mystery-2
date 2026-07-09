@@ -1,0 +1,537 @@
+-- RNXhub | Player Fling GUI
+-- Оригинальная логика флинга + твой GUI
+
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local LocalPlayer = Players.LocalPlayer
+
+-- ========== GUI В СТИЛЕ RNXhub ==========
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "RNXhub_Fling"
+screenGui.ResetOnSpawn = false
+
+local success, err = pcall(function()
+    local GUIParent = game:GetService("CoreGui")
+    if gethui then GUIParent = gethui() end
+    screenGui.Parent = GUIParent
+end)
+
+if not success then
+    screenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+end
+
+-- ========== ОСНОВНОЕ ОКНО ==========
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0, 300, 0, 320)
+mainFrame.Position = UDim2.new(0.5, -150, 0.5, -160)
+mainFrame.BackgroundColor3 = Color3.fromRGB(10, 10, 20)
+mainFrame.BackgroundTransparency = 0.05
+mainFrame.BorderSizePixel = 0
+mainFrame.Active = true
+mainFrame.Draggable = true
+mainFrame.Parent = screenGui
+
+local mainCorner = Instance.new("UICorner")
+mainCorner.CornerRadius = UDim.new(0, 12)
+mainCorner.Parent = mainFrame
+
+local mainStroke = Instance.new("UIStroke")
+mainStroke.Color = Color3.fromRGB(0, 200, 255)
+mainStroke.Thickness = 1.5
+mainStroke.Transparency = 0.3
+mainStroke.Parent = mainFrame
+
+-- ========== ЗАГОЛОВОК ==========
+local titleBar = Instance.new("Frame")
+titleBar.Size = UDim2.new(1, 0, 0, 35)
+titleBar.Position = UDim2.new(0, 0, 0, 0)
+titleBar.BackgroundColor3 = Color3.fromRGB(20, 20, 35)
+titleBar.BackgroundTransparency = 0
+titleBar.BorderSizePixel = 0
+titleBar.Parent = mainFrame
+
+local titleBarCorner = Instance.new("UICorner")
+titleBarCorner.CornerRadius = UDim.new(0, 12)
+titleBarCorner.Parent = titleBar
+
+local titleLabel = Instance.new("TextLabel")
+titleLabel.Size = UDim2.new(1, -80, 1, 0)
+titleLabel.Position = UDim2.new(0, 15, 0, 0)
+titleLabel.BackgroundTransparency = 1
+titleLabel.Text = "RNXhub | Fling Player"
+titleLabel.Font = Enum.Font.GothamBold
+titleLabel.TextSize = 12
+titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+titleLabel.Parent = titleBar
+
+-- Кнопка сворачивания
+local minimizeBtn = Instance.new("TextButton")
+minimizeBtn.Size = UDim2.new(0, 28, 0, 24)
+minimizeBtn.Position = UDim2.new(1, -60, 0, 5)
+minimizeBtn.Text = "━"
+minimizeBtn.Font = Enum.Font.GothamBold
+minimizeBtn.TextSize = 14
+minimizeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+minimizeBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
+minimizeBtn.AutoButtonColor = false
+minimizeBtn.Parent = titleBar
+
+local minimizeCorner = Instance.new("UICorner")
+minimizeCorner.CornerRadius = UDim.new(0, 6)
+minimizeCorner.Parent = minimizeBtn
+
+-- Кнопка закрытия
+local closeBtn = Instance.new("TextButton")
+closeBtn.Size = UDim2.new(0, 28, 0, 24)
+closeBtn.Position = UDim2.new(1, -28, 0, 5)
+closeBtn.Text = "X"
+closeBtn.Font = Enum.Font.GothamBold
+closeBtn.TextSize = 14
+closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+closeBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+closeBtn.AutoButtonColor = false
+closeBtn.Parent = titleBar
+
+local closeCorner = Instance.new("UICorner")
+closeCorner.CornerRadius = UDim.new(0, 6)
+closeCorner.Parent = closeBtn
+
+-- Эффекты для кнопок заголовка
+minimizeBtn.MouseEnter:Connect(function()
+    minimizeBtn.BackgroundColor3 = Color3.fromRGB(80, 80, 100)
+end)
+minimizeBtn.MouseLeave:Connect(function()
+    minimizeBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
+end)
+
+closeBtn.MouseEnter:Connect(function()
+    closeBtn.BackgroundColor3 = Color3.fromRGB(255, 80, 80)
+end)
+closeBtn.MouseLeave:Connect(function()
+    closeBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+end)
+
+-- ========== МИНИ-ОКНО ==========
+local miniBar = Instance.new("Frame")
+miniBar.Size = UDim2.new(0, 200, 0, 30)
+miniBar.Position = UDim2.new(0.5, -100, 0.5, -15)
+miniBar.BackgroundColor3 = Color3.fromRGB(10, 10, 20)
+miniBar.BackgroundTransparency = 0.05
+miniBar.BorderSizePixel = 0
+miniBar.Active = true
+miniBar.Draggable = true
+miniBar.Visible = false
+miniBar.Parent = screenGui
+
+local miniCorner = Instance.new("UICorner")
+miniCorner.CornerRadius = UDim.new(0, 12)
+miniCorner.Parent = miniBar
+
+local miniStroke = Instance.new("UIStroke")
+miniStroke.Color = Color3.fromRGB(0, 200, 255)
+miniStroke.Thickness = 1
+miniStroke.Transparency = 0.3
+miniStroke.Parent = miniBar
+
+local miniTitle = Instance.new("TextLabel")
+miniTitle.Size = UDim2.new(1, -60, 1, 0)
+miniTitle.Position = UDim2.new(0, 10, 0, 0)
+miniTitle.BackgroundTransparency = 1
+miniTitle.Text = "RNXhub | Fling"
+miniTitle.Font = Enum.Font.GothamBold
+miniTitle.TextSize = 11
+miniTitle.TextColor3 = Color3.fromRGB(0, 200, 255)
+miniTitle.TextXAlignment = Enum.TextXAlignment.Left
+miniTitle.Parent = miniBar
+
+local miniExpandBtn = Instance.new("TextButton")
+miniExpandBtn.Size = UDim2.new(0, 25, 0, 22)
+miniExpandBtn.Position = UDim2.new(1, -55, 0, 4)
+miniExpandBtn.Text = "━"
+miniExpandBtn.Font = Enum.Font.GothamBold
+miniExpandBtn.TextSize = 14
+miniExpandBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+miniExpandBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 70)
+miniExpandBtn.AutoButtonColor = false
+miniExpandBtn.Parent = miniBar
+
+local miniExpandCorner = Instance.new("UICorner")
+miniExpandCorner.CornerRadius = UDim.new(0, 6)
+miniExpandCorner.Parent = miniExpandBtn
+
+local miniCloseBtn = Instance.new("TextButton")
+miniCloseBtn.Size = UDim2.new(0, 25, 0, 22)
+miniCloseBtn.Position = UDim2.new(1, -28, 0, 4)
+miniCloseBtn.Text = "X"
+miniCloseBtn.Font = Enum.Font.GothamBold
+miniCloseBtn.TextSize = 12
+miniCloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+miniCloseBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+miniCloseBtn.AutoButtonColor = false
+miniCloseBtn.Parent = miniBar
+
+local miniCloseCorner = Instance.new("UICorner")
+miniCloseCorner.CornerRadius = UDim.new(0, 6)
+miniCloseCorner.Parent = miniCloseBtn
+
+-- ========== ОСНОВНОЙ КОНТЕЙНЕР ==========
+local container = Instance.new("Frame")
+container.Size = UDim2.new(1, -10, 1, -45)
+container.Position = UDim2.new(0, 5, 0, 40)
+container.BackgroundTransparency = 1
+container.Parent = mainFrame
+
+local layout = Instance.new("UIListLayout")
+layout.Padding = UDim.new(0, 8)
+layout.FillDirection = Enum.FillDirection.Vertical
+layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+layout.Parent = container
+
+-- ========== СПИСОК ИГРОКОВ (ScrollingFrame) ==========
+local playerListFrame = Instance.new("Frame")
+playerListFrame.Size = UDim2.new(1, 0, 0, 120)
+playerListFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 35)
+playerListFrame.BackgroundTransparency = 0.1
+playerListFrame.BorderSizePixel = 0
+playerListFrame.Parent = container
+
+local playerListCorner = Instance.new("UICorner")
+playerListCorner.CornerRadius = UDim.new(0, 8)
+playerListCorner.Parent = playerListFrame
+
+local playerListStroke = Instance.new("UIStroke")
+playerListStroke.Color = Color3.fromRGB(0, 200, 255)
+playerListStroke.Thickness = 1
+playerListStroke.Transparency = 0.4
+playerListStroke.Parent = playerListFrame
+
+local playerScroll = Instance.new("ScrollingFrame")
+playerScroll.Size = UDim2.new(1, -8, 1, -8)
+playerScroll.Position = UDim2.new(0, 4, 0, 4)
+playerScroll.BackgroundTransparency = 1
+playerScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+playerScroll.ScrollBarThickness = 3
+playerScroll.Parent = playerListFrame
+
+local playerLayout = Instance.new("UIListLayout")
+playerLayout.Padding = UDim.new(0, 4)
+playerLayout.FillDirection = Enum.FillDirection.Vertical
+playerLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+playerLayout.SortOrder = Enum.SortOrder.LayoutOrder
+playerLayout.Parent = playerScroll
+
+playerLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+    playerScroll.CanvasSize = UDim2.new(0, 0, 0, playerLayout.AbsoluteContentSize.Y + 8)
+end)
+
+-- ========== ВЫБРАННЫЙ ИГРОК ==========
+local selectedPlayer = nil
+local selectedBtn = nil
+
+local selectedLabel = Instance.new("TextLabel")
+selectedLabel.Size = UDim2.new(1, 0, 0, 22)
+selectedLabel.BackgroundTransparency = 1
+selectedLabel.Text = "Выбран: Никто"
+selectedLabel.Font = Enum.Font.GothamBold
+selectedLabel.TextSize = 12
+selectedLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+selectedLabel.TextXAlignment = Enum.TextXAlignment.Center
+selectedLabel.Parent = container
+
+-- ========== КНОПКА ФЛИНГА ==========
+local flingBtn = Instance.new("TextButton")
+flingBtn.Size = UDim2.new(1, 0, 0, 45)
+flingBtn.Text = "💥 ФЛИНГНУТЬ"
+flingBtn.Font = Enum.Font.GothamBold
+flingBtn.TextSize = 14
+flingBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+flingBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+flingBtn.AutoButtonColor = false
+flingBtn.Parent = container
+
+local flingCorner = Instance.new("UICorner")
+flingCorner.CornerRadius = UDim.new(0, 8)
+flingCorner.Parent = flingBtn
+
+flingBtn.MouseEnter:Connect(function()
+    flingBtn.BackgroundColor3 = Color3.fromRGB(255, 80, 80)
+end)
+flingBtn.MouseLeave:Connect(function()
+    flingBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+end)
+
+-- ========== СТАТУС ==========
+local statusText = Instance.new("TextLabel")
+statusText.Size = UDim2.new(1, 0, 0, 25)
+statusText.Position = UDim2.new(0, 0, 1, -30)
+statusText.BackgroundTransparency = 1
+statusText.Text = "Готов к флингу"
+statusText.Font = Enum.Font.Gotham
+statusText.TextSize = 10
+statusText.TextColor3 = Color3.fromRGB(0, 255, 0)
+statusText.Parent = mainFrame
+
+local function setStatus(text, color)
+    statusText.Text = text
+    statusText.TextColor3 = color or Color3.fromRGB(0, 255, 0)
+end
+
+-- ========== ОРИГИНАЛЬНАЯ ЛОГИКА ФЛИНГА ==========
+local function Message(_Title, _Text, Time)
+    game:GetService("StarterGui"):SetCore("SendNotification", {Title = _Title, Text = _Text, Duration = Time})
+end
+
+local function GetPlayer(Name)
+    Name = Name:lower()
+    for _, x in next, Players:GetPlayers() do
+        if x ~= LocalPlayer then
+            if x.Name:lower():match("^" .. Name) or x.DisplayName:lower():match("^" .. Name) then
+                return x
+            end
+        end
+    end
+    return nil
+end
+
+local function SkidFling(TargetPlayer)
+    local Character = LocalPlayer.Character
+    local Humanoid = Character and Character:FindFirstChildOfClass("Humanoid")
+    local RootPart = Humanoid and Humanoid.RootPart
+
+    local TCharacter = TargetPlayer.Character
+    local THumanoid = TCharacter and TCharacter:FindFirstChildOfClass("Humanoid")
+    local TRootPart = THumanoid and THumanoid.RootPart
+    local THead = TCharacter and TCharacter:FindFirstChild("Head")
+    local Accessory = TCharacter and TCharacter:FindFirstChildOfClass("Accessory")
+    local Handle = Accessory and Accessory:FindFirstChild("Handle")
+
+    if Character and Humanoid and RootPart then
+        if RootPart.Velocity.Magnitude < 50 then
+            getgenv().OldPos = RootPart.CFrame
+        end
+        if THumanoid and THumanoid.Sit then
+            return Message("Error Occurred", "Target is sitting", 5)
+        end
+        if THead then
+            workspace.CurrentCamera.CameraSubject = THead
+        elseif Handle then
+            workspace.CurrentCamera.CameraSubject = Handle
+        else
+            workspace.CurrentCamera.CameraSubject = THumanoid
+        end
+        if not TCharacter:FindFirstChildWhichIsA("BasePart") then
+            return
+        end
+        
+        local function FPos(BasePart, Pos, Ang)
+            RootPart.CFrame = CFrame.new(BasePart.Position) * Pos * Ang
+            Character:SetPrimaryPartCFrame(CFrame.new(BasePart.Position) * Pos * Ang)
+            RootPart.Velocity = Vector3.new(9e7, 9e7 * 10, 9e7)
+            RootPart.RotVelocity = Vector3.new(9e8, 9e8, 9e8)
+        end
+        
+        local function SFBasePart(BasePart)
+            local TimeToWait = 2
+            local Time = tick()
+            local Angle = 0
+
+            repeat
+                if RootPart and THumanoid then
+                    if BasePart.Velocity.Magnitude < 50 then
+                        Angle = Angle + 100
+
+                        FPos(BasePart, CFrame.new(0, 1.5, 0) + THumanoid.MoveDirection * BasePart.Velocity.Magnitude / 1.25, CFrame.Angles(math.rad(Angle),0 ,0))
+                        task.wait()
+
+                        FPos(BasePart, CFrame.new(0, -1.5, 0) + THumanoid.MoveDirection * BasePart.Velocity.Magnitude / 1.25, CFrame.Angles(math.rad(Angle), 0, 0))
+                        task.wait()
+
+                        FPos(BasePart, CFrame.new(2.25, 1.5, -2.25) + THumanoid.MoveDirection * BasePart.Velocity.Magnitude / 1.25, CFrame.Angles(math.rad(Angle), 0, 0))
+                        task.wait()
+
+                        FPos(BasePart, CFrame.new(-2.25, -1.5, 2.25) + THumanoid.MoveDirection * BasePart.Velocity.Magnitude / 1.25, CFrame.Angles(math.rad(Angle), 0, 0))
+                        task.wait()
+
+                        FPos(BasePart, CFrame.new(0, 1.5, 0) + THumanoid.MoveDirection,CFrame.Angles(math.rad(Angle), 0, 0))
+                        task.wait()
+
+                        FPos(BasePart, CFrame.new(0, -1.5, 0) + THumanoid.MoveDirection,CFrame.Angles(math.rad(Angle), 0, 0))
+                        task.wait()
+                    else
+                        FPos(BasePart, CFrame.new(0, 1.5, THumanoid.WalkSpeed), CFrame.Angles(math.rad(90), 0, 0))
+                        task.wait()
+
+                        FPos(BasePart, CFrame.new(0, -1.5, -THumanoid.WalkSpeed), CFrame.Angles(0, 0, 0))
+                        task.wait()
+
+                        FPos(BasePart, CFrame.new(0, 1.5, THumanoid.WalkSpeed), CFrame.Angles(math.rad(90), 0, 0))
+                        task.wait()
+                        
+                        FPos(BasePart, CFrame.new(0, 1.5, TRootPart.Velocity.Magnitude / 1.25), CFrame.Angles(math.rad(90), 0, 0))
+                        task.wait()
+
+                        FPos(BasePart, CFrame.new(0, -1.5, -TRootPart.Velocity.Magnitude / 1.25), CFrame.Angles(0, 0, 0))
+                        task.wait()
+
+                        FPos(BasePart, CFrame.new(0, 1.5, TRootPart.Velocity.Magnitude / 1.25), CFrame.Angles(math.rad(90), 0, 0))
+                        task.wait()
+
+                        FPos(BasePart, CFrame.new(0, -1.5, 0), CFrame.Angles(math.rad(90), 0, 0))
+                        task.wait()
+
+                        FPos(BasePart, CFrame.new(0, -1.5, 0), CFrame.Angles(0, 0, 0))
+                        task.wait()
+
+                        FPos(BasePart, CFrame.new(0, -1.5 ,0), CFrame.Angles(math.rad(-90), 0, 0))
+                        task.wait()
+
+                        FPos(BasePart, CFrame.new(0, -1.5, 0), CFrame.Angles(0, 0, 0))
+                        task.wait()
+                    end
+                else
+                    break
+                end
+            until BasePart.Velocity.Magnitude > 500 or BasePart.Parent ~= TargetPlayer.Character or TargetPlayer.Parent ~= Players or not TargetPlayer.Character == TCharacter or THumanoid.Sit or Humanoid.Health <= 0 or tick() > Time + TimeToWait
+        end
+        
+        workspace.FallenPartsDestroyHeight = 0/0
+        
+        local BV = Instance.new("BodyVelocity")
+        BV.Name = "EpixVel"
+        BV.Parent = RootPart
+        BV.Velocity = Vector3.new(9e8, 9e8, 9e8)
+        BV.MaxForce = Vector3.new(1/0, 1/0, 1/0)
+        
+        Humanoid:SetStateEnabled(Enum.HumanoidStateType.Seated, false)
+        
+        if TRootPart and THead then
+            if (TRootPart.CFrame.p - THead.CFrame.p).Magnitude > 5 then
+                SFBasePart(THead)
+            else
+                SFBasePart(TRootPart)
+            end
+        elseif TRootPart and not THead then
+            SFBasePart(TRootPart)
+        elseif not TRootPart and THead then
+            SFBasePart(THead)
+        elseif not TRootPart and not THead and Accessory and Handle then
+            SFBasePart(Handle)
+        else
+            return Message("Error Occurred", "Target is missing everything", 5)
+        end
+        
+        BV:Destroy()
+        Humanoid:SetStateEnabled(Enum.HumanoidStateType.Seated, true)
+        workspace.CurrentCamera.CameraSubject = Humanoid
+        
+        repeat
+            RootPart.CFrame = getgenv().OldPos * CFrame.new(0, .5, 0)
+            Character:SetPrimaryPartCFrame(getgenv().OldPos * CFrame.new(0, .5, 0))
+            Humanoid:ChangeState("GettingUp")
+            table.foreach(Character:GetChildren(), function(_, x)
+                if x:IsA("BasePart") then
+                    x.Velocity, x.RotVelocity = Vector3.new(), Vector3.new()
+                end
+            end)
+            task.wait()
+        until (RootPart.Position - getgenv().OldPos.p).Magnitude < 25
+        workspace.FallenPartsDestroyHeight = workspace.FallenPartsDestroyHeight
+        getgenv().OldPos = nil
+    else
+        return Message("Error Occurred", "Random error", 5)
+    end
+end
+
+-- ========== ОБНОВЛЕНИЕ СПИСКА ИГРОКОВ ==========
+local function updatePlayerList()
+    for _, child in pairs(playerScroll:GetChildren()) do
+        if child:IsA("TextButton") then
+            child:Destroy()
+        end
+    end
+    
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            local btn = Instance.new("TextButton")
+            btn.Size = UDim2.new(1, -4, 0, 28)
+            btn.Text = player.Name
+            btn.Font = Enum.Font.GothamBold
+            btn.TextSize = 12
+            btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+            btn.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+            btn.AutoButtonColor = false
+            btn.Parent = playerScroll
+            
+            local corner = Instance.new("UICorner")
+            corner.CornerRadius = UDim.new(0, 6)
+            corner.Parent = btn
+            
+            btn.MouseEnter:Connect(function()
+                if btn ~= selectedBtn then
+                    btn.BackgroundColor3 = Color3.fromRGB(45, 45, 60)
+                end
+            end)
+            btn.MouseLeave:Connect(function()
+                if btn ~= selectedBtn then
+                    btn.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+                end
+            end)
+            
+            btn.MouseButton1Click:Connect(function()
+                if selectedBtn then
+                    selectedBtn.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+                end
+                selectedPlayer = player
+                selectedBtn = btn
+                btn.BackgroundColor3 = Color3.fromRGB(0, 150, 75)
+                selectedLabel.Text = "Выбран: " .. player.Name
+                selectedLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
+                setStatus("Выбран: " .. player.Name, Color3.fromRGB(0, 255, 0))
+            end)
+        end
+    end
+end
+
+-- ========== ОБРАБОТЧИКИ ==========
+flingBtn.MouseButton1Click:Connect(function()
+    if selectedPlayer then
+        task.spawn(function()
+            SkidFling(selectedPlayer)
+        end)
+    else
+        setStatus("Выберите игрока!", Color3.fromRGB(255, 100, 100))
+    end
+end)
+
+Players.PlayerAdded:Connect(updatePlayerList)
+Players.PlayerRemoving:Connect(updatePlayerList)
+LocalPlayer.CharacterAdded:Connect(function()
+    task.wait(0.5)
+    updatePlayerList()
+end)
+
+task.wait(0.5)
+updatePlayerList()
+
+-- ========== УПРАВЛЕНИЕ ОКНОМ ==========
+local function minimizeWindow()
+    mainFrame.Visible = false
+    miniBar.Visible = true
+    miniBar.Position = mainFrame.Position
+end
+
+local function expandWindow()
+    miniBar.Visible = false
+    mainFrame.Visible = true
+end
+
+local function closeWindow()
+    screenGui:Destroy()
+end
+
+minimizeBtn.MouseButton1Click:Connect(minimizeWindow)
+closeBtn.MouseButton1Click:Connect(closeWindow)
+miniExpandBtn.MouseButton1Click:Connect(expandWindow)
+miniCloseBtn.MouseButton1Click:Connect(closeWindow)
