@@ -1,5 +1,5 @@
-# Murder mystery 2
-scripts murder mystery 2
+# RNXhub
+scripts for murder mystery 2
 
 <!-- How to use -->
 ## How to use 
