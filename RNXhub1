@@ -9,7 +9,9 @@ local UserInputService = game:GetService("UserInputService")
 local GuiService = game:GetService("GuiService")
 local TeleportService = game:GetService("TeleportService")
 local CoreGui = game:GetService("CoreGui")
+
 if not game:IsLoaded() then game.Loaded:Wait() end
+
 local Player = Players.LocalPlayer
 local Environment = type(getgenv) == "function" and getgenv() or _G
 local Key = "MM2Candy"
@@ -52,6 +54,7 @@ if type(prior) == "table" and type(prior.Settings) == "table" and prior.Player
     prior.Settings.WebhookURL = pendingWebhook(prior) or prior.Settings.WebhookURL
     Remembered[AccountId] = table.clone(prior.Settings)
 end
+
 local function unloadPrevious(previous)
     if type(previous) ~= "table" or type(previous.Unload) ~= "function" then return end
     local ok = cleanup(function() previous:Unload() end)
@@ -64,9 +67,11 @@ local function unloadPrevious(previous)
         if previous.Window then cleanup(function() previous.Window:Destroy() end) end
     end
 end
+
 unloadPrevious(prior)
+
 if game.PlaceId ~= 142823291 then
-    warn("[MM2 Candy] Open Murder Mystery 2 before running this script.")
+    warn("Открой Murder Mystery 2 перед запуском этого скрипта.")
     return
 end
 
@@ -76,14 +81,16 @@ local Defaults = {
     TravelSpeed = 55, TravelSpeedPresetVersion = 1, UnderfloorDepth = 6,
     TouchAssist = true,
     WebhookEnabled = false, WebhookURL = "", WebhookInterval = 10, WebhookOnFull = true,
+    EmoteEnabled = true,
 }
+
 local App = {
     Running = true, Player = Player, Settings = table.clone(Defaults),
     Connections = {}, Controls = {}, Collision = {}, TouchFlags = {}, Coins = {}, AntiFlingParts = {},
     TouchSupported = type(firetouchinterest) == "function",
     Cooldowns = setmetatable({}, {__mode = "k"}),
     Stats = {Collected = 0, Bags = 0, Rounds = 0, Deaths = 0, Corrections = 0},
-    StartedAt = os.clock(), ActiveElapsed = 0, Status = "Disabled", BagCount = 0,
+    StartedAt = os.clock(), ActiveElapsed = 0, Status = "Отключено", BagCount = 0,
     BagCapacity = nil, BagFull = false, RoundBlocked = false, RoundSerial = 0,
     Map = nil, Target = nil, FullHandled = false, ResetRequested = false,
     PauseUntil = 0, NextScan = 0, NextRound = 0, DeathRecorded = false,
@@ -93,6 +100,7 @@ local App = {
     DeathBootstrapAllowed = true,
     Flow = {Phase = "Waiting", Owner = nil, Epoch = 0, ChangedAt = os.clock()},
     ReturnTween = type(prior) == "table" and prior.ReturnTween or nil,
+    IsLayingPose = false,
 }
 Environment[Key] = App
 
@@ -105,6 +113,41 @@ end
 function App:Notify(title, message, kind)
     if self.Window and not self.Window._destroyed then
         self.Window:Notify({Title = title, Content = message, Type = kind or "Info", Duration = 4})
+    end
+end
+
+function App:PlayLayingEmote()
+    if not self.Settings.EmoteEnabled then return end
+    local character = Player.Character
+    if not character then return end
+    
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    local root = character:FindFirstChild("HumanoidRootPart")
+    if not humanoid or not root then return end
+    
+    if self.IsLayingPose then return end
+    self.IsLayingPose = true
+    
+    humanoid.PlatformStand = false
+    humanoid.Sit = false
+    
+    root.AssemblyLinearVelocity = Vector3.zero
+    root.AssemblyAngularVelocity = Vector3.zero
+    
+    root.CFrame = root.CFrame * CFrame.Angles(math.rad(-90), 0, 0)
+    humanoid:ChangeState(Enum.HumanoidStateType.Running)
+end
+
+function App:StopEmote()
+    if not self.IsLayingPose then return end
+    self.IsLayingPose = false
+    
+    local character = Player.Character
+    if character then
+        local humanoid = character:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            humanoid.PlatformStand = true
+        end
     end
 end
 
@@ -193,12 +236,12 @@ function App:ScheduleSave()
 end
 
 function App:SaveState()
-    if not self.StateLoaded then return false, "State has not loaded yet." end
+    if not self.StateLoaded then return false, "Состояние ещё не загружено." end
     self:RememberState()
     if not self:StateReady() then
         self.SaveDue = os.clock() + 5
         self.PersistenceMode = "Memory"
-        return false, "Disk saving is unavailable."
+        return false, "Сохранение на диск недоступно."
     end
     local ok, err = pcall(function()
         writefile(self.StatePath, HttpService:JSONEncode({Version = 1, UserId = Player.UserId, Settings = self.Settings}))
@@ -289,19 +332,19 @@ end
 
 function App:CancelReconnect()
     self.ReconnectPending = nil
-    self.ReconnectStatus = "Off"
+    self.ReconnectStatus = "Выкл"
 end
 
 function App:QueueReconnect(reason)
     if not self.Running or self.Unloading or not self.Settings.AutoReconnect or self.ReconnectPending then return end
     self.StartGuard = nil
     self.ReconnectPending = {Reason = reason, Attempts = 0, NextAt = os.clock() + 3, InFlight = false}
-    self.ReconnectStatus = "Reconnecting in 3 seconds"
+    self.ReconnectStatus = "Переподключение через 3 секунды"
     self.Settings.WebhookURL = pendingWebhook(self) or self.Settings.WebhookURL
     self:SaveState()
     cleanup(function() self:ReleaseFlight(false) end)
     self:Transition("Reconnecting", reason)
-    self:Notify("Auto Reconnect", "Disconnected. Rejoining the game...", "Info")
+    self:Notify("Авто-переподключение", "Отключено. Переподключаюсь к игре...", "Info")
 end
 
 function App:ReconnectFailed(message)
@@ -310,24 +353,24 @@ function App:ReconnectFailed(message)
     pending.InFlight = false
     pending.NextAt = os.clock() + math.min(30, 3 * 2 ^ math.min(pending.Attempts - 1, 4))
     self.ReconnectError = tostring(message)
-    self.ReconnectStatus = "Reconnect failed; retrying"
+    self.ReconnectStatus = "Ошибка переподключения; повтор"
 end
 
 function App:ReconnectTick()
     if not self.Running or self.Unloading or not self.Settings.AutoReconnect then return end
     if not self.ReconnectPending then
         local reason = self:DisconnectReason()
-        if not reason then self.ReconnectStatus = "Waiting for disconnect"; return end
+        if not reason then self.ReconnectStatus = "Ожидание отключения"; return end
         self:QueueReconnect(reason)
     end
     local pending, now = self.ReconnectPending, os.clock()
     if pending.InFlight then
-        if now >= pending.Deadline then self:ReconnectFailed("Teleport did not complete") end
+        if now >= pending.Deadline then self:ReconnectFailed("Телепорт не завершён") end
         return
     end
     if now < pending.NextAt then return end
     pending.Attempts, pending.InFlight, pending.Deadline = pending.Attempts + 1, true, now + 30
-    self.ReconnectStatus = "Joining game (attempt " .. pending.Attempts .. ")"
+    self.ReconnectStatus = "Подключение (попытка " .. pending.Attempts .. ")"
     local ok, err = pcall(function() TeleportService:Teleport(game.PlaceId, Player) end)
     if self.ReconnectPending ~= pending then return end
     if not ok then self:ReconnectFailed(err) end
@@ -346,7 +389,7 @@ function App:StartReconnect()
     end)
     self.ReconnectMonitor.TeleportState = pcall(function()
         self:Connect(Player.OnTeleport, function(state)
-            if state == Enum.TeleportState.Failed then self:ReconnectFailed("Teleport failed") end
+            if state == Enum.TeleportState.Failed then self:ReconnectFailed("Ошибка телепорта") end
         end)
     end)
     self.ReconnectWorker = task.spawn(function()
@@ -365,7 +408,7 @@ local roundOK, RoundData = pcall(require, roundModule)
 local profileOK, Profile = pcall(require, profileModule)
 if not roundOK or type(RoundData) ~= "table" or not gameplay then
     App.Running = false
-    warn("[MM2 Candy] CurrentRoundClient/Gameplay unavailable; no movement started.")
+    warn("CurrentRoundClient/Gameplay недоступны; движение не запущено.")
     return
 end
 if not profileOK then Profile = nil end
@@ -413,15 +456,15 @@ end
 function App:RoundState()
     local character, humanoid, root = self:GetCharacter()
     if not character or not humanoid or not root or humanoid.Health <= 0
-        or humanoid:GetState() == Enum.HumanoidStateType.Dead then return false, "Dead / respawning" end
+        or humanoid:GetState() == Enum.HumanoidStateType.Dead then return false, "Мёртв / респавн" end
     local timer = workspace:FindFirstChild("RoundTimerPart")
     local remaining = timer and timer:GetAttribute("Time")
     if type(remaining) ~= "number" or remaining <= 0 or remaining ~= remaining then
-        return false, "Waiting for an active round"
+        return false, "Ожидание активного раунда"
     end
     local entry = RoundData.PlayerData and RoundData.PlayerData[Player.Name]
     if self.RoundBlocked or not self.Map or not self.Map.Parent or not self:IsRoundParticipantAlive(entry) then
-        return false, "Waiting for an active round"
+        return false, "Ожидание активного раунда"
     end
     if self.BoundsMap ~= self.Map then
         self.BoundsFrame, self.BoundsSize = self.Map:GetBoundingBox()
@@ -431,9 +474,9 @@ function App:RoundState()
     if math.abs(offset.X) > self.BoundsSize.X / 2 + 100
         or math.abs(offset.Z) > self.BoundsSize.Z / 2 + 100
         or math.abs(offset.Y) > self.BoundsSize.Y / 2 + 200 then
-        return false, "Outside the active map"
+        return false, "Вне активной карты"
     end
-    return true, "Active", character, humanoid, root
+    return true, "Активно", character, humanoid, root
 end
 
 function App:RoundOngoing()
@@ -474,18 +517,18 @@ function App:DeathEndRoundAllowed()
 end
 
 function App:DeathEndRoundState()
-    if not self:DeathEndRoundAllowed() then return false, "Waiting for an active round" end
-    if os.clock() < self.DeathEndRoundContext.ReadyAt then return false, "Auto End Round: waiting for respawn" end
+    if not self:DeathEndRoundAllowed() then return false, "Ожидание активного раунда" end
+    if os.clock() < self.DeathEndRoundContext.ReadyAt then return false, "Авто-конец раунда: ожидание респавна" end
     local character, humanoid, root = self:GetCharacter()
     if not character or not character:IsDescendantOf(workspace) or not humanoid or not root
         or humanoid.Health <= 0 or humanoid:GetState() == Enum.HumanoidStateType.Dead or root.Anchored then
-        return false, "Auto End Round: waiting for respawn"
+        return false, "Авто-конец раунда: ожидание респавна"
     end
     if self.BoundsMap ~= self.Map then
         self.BoundsFrame, self.BoundsSize = self.Map:GetBoundingBox()
         self.BoundsMap = self.Map
     end
-    return true, "Auto End Round after death", character, humanoid, root
+    return true, "Авто-конец раунда после смерти", character, humanoid, root
 end
 
 function App:CancelDeathEndRound(restorePosition)
@@ -546,7 +589,7 @@ function App:Snapshot()
         Deaths = self.Stats.Deaths, Elapsed = elapsed,
         Rate = self.ActiveElapsed > 0 and self.Stats.Collected * 3600 / self.ActiveElapsed or 0,
         BagCount = self.BagCount, BagCapacity = self.BagCapacity,
-        Map = self.Map and self.Map.Name or "Lobby", Status = self.Status, TotalCandy = self:TotalCandy(),
+        Map = self.Map and self.Map.Name or "Лобби", Status = self.Status, TotalCandy = self:TotalCandy(),
     }
 end
 
@@ -624,7 +667,7 @@ function App:BeginHarvestPause()
     self:UpdateHarvestPause(pause, root, true)
     root.AssemblyLinearVelocity, root.AssemblyAngularVelocity = Vector3.zero, Vector3.zero
     self.Expected = root.Position
-    self.Status = "Candy collected: waiting before next flight"
+    self.Status = "Конфета собрана: ожидание перед следующим полётом"
 end
 
 function App:CancelMove()
@@ -651,13 +694,13 @@ function App:DisableTouchAssist(reason)
     if control and not self.Unloading then
         control:Set(false, true)
         control:SetLocked(true)
-        control:SetDesc("requires executor support")
+        control:SetDesc("требуется поддержка executor")
     end
 end
 
 function App:ReleaseFlight(restorePosition)
     self.HarvestPause = nil
-    self:StopEndRound("Movement stopped")
+    self:StopEndRound("Движение остановлено")
     self:CancelMove()
     self:ResetPickup()
     local _, humanoid, root = self:GetCharacter()
@@ -767,10 +810,10 @@ end
 function App:MovementState()
     if self.DeathEndRoundContext then return self:DeathEndRoundState() end
     local active, reason, character, humanoid, root = self:RoundState()
-    if not active and reason == "Outside the active map" and self.EndRoundAttempt then
+    if not active and reason == "Вне активной карты" and self.EndRoundAttempt then
         character, humanoid, root = self:GetCharacter()
         if character == self.EndRoundAttempt.Character and root == self.EndRoundAttempt.Root and finiteFrame(root.CFrame) then
-            return true, "Auto End Round contact", character, humanoid, root
+            return true, "Авто-конец раунда контакт", character, humanoid, root
         end
     end
     return active, reason, character, humanoid, root
@@ -827,10 +870,10 @@ function App:SafePoint()
         self.SafeCFrame, self.SafeMap = CFrame.new(point), self.Map
         if self.SafePlatform then cleanup(function() self.SafePlatform:Destroy() end) end
         local platform = Instance.new("Part")
-        platform.Name, platform.Size = "MM2Candy_SafePlatform", Vector3.new(14, 1, 14)
+        platform.Name, platform.Size = "RNXhub_SafePlatform", Vector3.new(14, 1, 14)
         platform.Anchored, platform.CanCollide, platform.CanTouch = true, true, false
         platform.Transparency, platform.Material = 0.55, Enum.Material.Neon
-        platform.Color = Color3.fromRGB(255, 144, 55)
+        platform.Color = Color3.fromRGB(0, 200, 255)
         platform.CFrame, platform.Parent = CFrame.new(point - Vector3.new(0, 3, 0)), workspace
         self.SafePlatform = platform
     end
@@ -839,7 +882,7 @@ end
 
 function App:Park(root, dt, status)
     self.HarvestPause = nil
-    self:StopEndRound("Safe zone")
+    self:StopEndRound("Безопасная зона")
     self:CancelMove()
     self:ResetPickup()
     local point = self:SafePoint()
@@ -848,7 +891,7 @@ function App:Park(root, dt, status)
         root.AssemblyLinearVelocity, root.AssemblyAngularVelocity = Vector3.zero, Vector3.zero
         self.Expected = point
     end
-    self.Status = status or "Safe zone"
+    self.Status = status or "Безопасная зона"
     self.Target = nil
     self.WaitingPosition = nil
 end
@@ -901,7 +944,7 @@ function App:StepRoundStart(holdOnly)
     end
     guard.Character, guard.Root, guard.Map = character, root, map
     self.DeathEligibleCharacter, self.DeathObservedRoundSerial = character, self.RoundSerial
-    self:Transition("Starting", "Round start protection")
+    self:Transition("Starting", "Защита старта раунда")
     self:PrepareFlight(character, humanoid, root)
     if not holdOnly and self:RoundState() then
         self:ScanCoins()
@@ -909,7 +952,7 @@ function App:StepRoundStart(holdOnly)
         local coin = self:PickCoin(root)
         if coin then
             local position = self:CoinDestination(coin)
-            self:Transition("Farming", "First candy after round start")
+            self:Transition("Farming", "Первая конфета после старта раунда")
             self:CancelMove()
             self:ResetPickup()
             root.CFrame = CFrame.new(position) * root.CFrame.Rotation
@@ -921,15 +964,18 @@ function App:StepRoundStart(holdOnly)
             return false
         end
     end
-    self:Park(root, 0, self:RoundTimerStarted() and "Safe zone: waiting for candies" or "Safe zone: waiting for round start")
+    self:Park(root, 0, self:RoundTimerStarted() and "Безопасная зона: ожидание конфет" or "Безопасная зона: ожидание старта раунда")
     return true
 end
 
 function App:SetFarm(enabled)
     enabled = enabled == true
     self.StartGuard = nil
-    if not enabled then self:CancelDeathEndRound(true) end
-    self:CancelEndRoundSequence("Farm changed")
+    if not enabled then
+        self:CancelDeathEndRound(true)
+        self:StopEmote()
+    end
+    self:CancelEndRoundSequence("Фарм изменён")
     self:CancelMove()
     self:ResetPickup()
     self.Settings.FarmEnabled = enabled
@@ -938,8 +984,8 @@ function App:SetFarm(enabled)
     if not enabled then
         self.DeathEligibleCharacter = nil
         self:ReleaseFlight(true)
-        self.Status = "Disabled"
-        self:Transition("Disabled", "Manual stop")
+        self.Status = "Отключено"
+        self:Transition("Disabled", "Ручная остановка")
     elseif self.Map and not self:RoundTimerStarted() then
         self:ArmRoundStart()
     end
@@ -952,16 +998,25 @@ function App:Set(key, value)
         self:DisableTouchAssist()
         return
     end
-    if key == "TravelSpeed" or key == "UnderfloorDepth" or key == "TouchAssist" then
+    if key == "TravelSpeed" or key == "UnderfloorDepth" or key == "TouchAssist" or key == "EmoteEnabled" then
         self:CancelMove()
         self:ResetPickup()
         self.Target, self.WaitingPosition = nil, nil
-        table.clear(self.Cooldowns)
+        if key ~= "EmoteEnabled" then table.clear(self.Cooldowns) end
     end
-    if key == "FarmEnabled" then self:SetFarm(value) else self.Settings[key] = value end
+    if key == "FarmEnabled" then 
+        self:SetFarm(value) 
+    else 
+        self.Settings[key] = value 
+    end
+    
+    if key == "EmoteEnabled" and not value then
+        self:StopEmote()
+    end
+
     if key == "AutoEndRound" and not value then
         self:CancelDeathEndRound(true)
-        self:CancelEndRoundSequence("Auto End Round disabled")
+        self:CancelEndRoundSequence("Авто-конец раунда выключен")
     end
     if key == "AntiFling" then self:UpdateAntiFling(); self.AntiFlingStable = nil end
     if key == "AutoReconnect" and not value then self:CancelReconnect() end
@@ -975,9 +1030,10 @@ end
 function App:ResetRound()
     self.StartGuard = nil
     self.AntiFlingStable = nil
+    self:StopEmote()
     self:CancelDeathEndRound(false)
     self.DeathBootstrapAllowed, self.DeathObservedRoundSerial = false, nil
-    self:CancelEndRoundSequence("New round")
+    self:CancelEndRoundSequence("Новый раунд")
     self.EndRoundRetryAt, self.EndRoundTries, self.EndRoundResult = 0, 0, nil
     self:CancelMove()
     self:ResetPickup()
@@ -998,14 +1054,15 @@ function App:EndRound()
         self.LastEndRoundReport = table.clone(self.EndRoundCycle)
     end
     self.AntiFlingStable = nil
+    self:StopEmote()
     self:CancelDeathEndRound(false)
     self:ResetPickup()
     self.RoundBlocked = true
     self.Target, self.ManualPark = nil, false
     self.DeathEligibleCharacter = nil
     self:ReleaseFlight(false)
-    self:CancelEndRoundSequence("Round ended")
-    self:Transition("WaitingRound", "Round ended")
+    self:CancelEndRoundSequence("Раунд завершён")
+    self:Transition("WaitingRound", "Раунд завершён")
 end
 
 local RouteCandidateLimit, RoutePasses, RouteEpsilon = 32, 2, 0.0001
@@ -1260,11 +1317,11 @@ function App:PauseForCorrection()
     self.Stats.Corrections = self.Stats.Corrections + 1
     self.PauseUntil, self.Target = os.clock() + 8, nil
     self:ReleaseFlight(false)
-    self:Transition("Cooldown", "Movement interrupted")
-    self.Status = "Movement correction: retrying in 8 seconds"
+    self:Transition("Cooldown", "Движение прервано")
+    self.Status = "Коррекция движения: повтор через 8 секунд"
     if os.clock() >= (self.NextCorrectionNotice or 0) then
         self.NextCorrectionNotice = os.clock() + 30
-        self:Notify("Farm retrying", "Movement was interrupted. Auto Farm will resume in 8 seconds.", "Warning")
+        self:Notify("Фарм перезапускается", "Движение было прервано. Авто-фарм возобновится через 8 секунд.", "Warning")
     end
 end
 
@@ -1283,29 +1340,29 @@ function App:ApplyEndRoundPhysics(simulationStep, expectedAttempt)
         or targetHumanoid ~= attempt.TargetHumanoid or not attempt.Humanoid.Parent or attempt.Humanoid.Health <= 0
         or attempt.Humanoid:GetState() == Enum.HumanoidStateType.Dead or attempt.Humanoid.Sit
         or not attempt.Root:IsDescendantOf(attempt.Character) or attempt.Root.Anchored or targetHumanoid.Sit then
-        self:StopEndRound("Contact context changed"); return
+        self:StopEndRound("Контактный контекст изменился"); return
     end
-    if not finiteFrame(attempt.Root.CFrame) or not finiteFrame(targetRoot.CFrame) then self:StopEndRound("Invalid transform"); return end
+    if not finiteFrame(attempt.Root.CFrame) or not finiteFrame(targetRoot.CFrame) then self:StopEndRound("Неверный transform"); return end
     local collider = attempt.TargetPart
     if not collider.Parent or not collider:IsDescendantOf(character) or collider.Anchored or not finiteFrame(collider.CFrame) then
-        self:StopEndRound("No valid target contact part"); return
+        self:StopEndRound("Нет валидной части контакта"); return
     end
     local velocity = collider.Velocity
     local speed = velocity.Magnitude
-    if speed ~= speed or speed == math.huge then self:StopEndRound("Invalid target velocity"); return end
+    if speed ~= speed or speed == math.huge then self:StopEndRound("Неверная скорость цели"); return end
     attempt.MaxTargetSpeed = math.max(attempt.MaxTargetSpeed or speed, speed)
     attempt.MaxTargetDisplacement = math.max(attempt.MaxTargetDisplacement or 0, (targetRoot.Position - attempt.InitialTargetPosition).Magnitude)
     if attempt.BatchFinished then
         attempt.BatchFinished = false
         if speed > 500 then
             cycle.MotionObserved = true
-            self:StopEndRound("Target motion observed; awaiting server confirmation"); return
+            self:StopEndRound("Движение цели замечено; ожидание подтверждения сервера"); return
         end
     end
-    if now >= attempt.Deadline then self:StopEndRound("Contact window elapsed"); return end
+    if now >= attempt.Deadline then self:StopEndRound("Окно контакта истекло"); return end
     local offset = targetRoot.Position - self.BoundsFrame.Position
     if math.abs(offset.X) > self.BoundsSize.X / 2 + 40 or math.abs(offset.Z) > self.BoundsSize.Z / 2 + 40
-        or math.abs(offset.Y) > self.BoundsSize.Y / 2 + 100 then self:StopEndRound("Target outside map"); return end
+        or math.abs(offset.Y) > self.BoundsSize.Y / 2 + 100 then self:StopEndRound("Цель вне карты"); return end
     if not attempt.SpinStarted then
         attempt.AutoRotate, attempt.PlatformStand = attempt.Humanoid.AutoRotate, attempt.Humanoid.PlatformStand
         attempt.PostureSaved = true
@@ -1328,7 +1385,7 @@ function App:ApplyEndRoundPhysics(simulationStep, expectedAttempt)
         attempt.Humanoid:SetStateEnabled(Enum.HumanoidStateType.Seated, false)
         local controller = Instance.new("BodyVelocity")
         attempt.VelocityController = controller
-        controller.Name = "TeleportFlingTemporaryVelocity"
+        controller.Name = "RNXhub_TemporaryVelocity"
         controller.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
         controller.Velocity = Vector3.new(9e8, 9e8, 9e8)
         controller.Parent = attempt.Root
@@ -1375,7 +1432,7 @@ function App:ApplyEndRoundPhysics(simulationStep, expectedAttempt)
     end
     local pitch = math.rad(attempt.Rotations and attempt.Rotations[sample] or attempt.Angle)
     local goal = CFrame.new(collider.Position) * attempt.Offsets[sample] * CFrame.Angles(pitch, 0, 0)
-    if not finiteFrame(goal) then self:StopEndRound("Invalid contact pose"); return end
+    if not finiteFrame(goal) then self:StopEndRound("Неверная контактная поза"); return end
     placeEndRoundCharacter(attempt.Character, attempt.Root, goal)
     local placedDistance = (attempt.Root.Position - collider.Position).Magnitude
     attempt.ClosestDistance = math.min(attempt.ClosestDistance or math.huge, placedDistance)
@@ -1402,13 +1459,13 @@ function App:RunEndRoundWorker(attempt)
             attempt.Error = tostring(err)
             if self.EndRoundAttempt == attempt then
                 self.LastError = tostring(err)
-                self:StopEndRound("Fling error")
+                self:StopEndRound("Ошибка флинга")
                 self:SetFarm(false)
-                self:Notify("Farm stopped", "Fling error; details are in the executor console.", "Warning")
-                warn("[MM2 Candy] Fling: " .. tostring(err))
+                self:Notify("Фарм остановлен", "Ошибка флинга; детали в консоли executor.", "Warning")
+                warn("Fling: " .. tostring(err))
             end
         elseif self.EndRoundAttempt == attempt then
-            self:StopEndRound("Fling cancelled")
+            self:StopEndRound("Флинг отменён")
         end
     end)
 end
@@ -1416,21 +1473,21 @@ end
 function App:TryEndRound(character, root)
     local own = RoundData.PlayerData and RoundData.PlayerData[Player.Name]
     if not self.Settings.AutoEndRound or (not own and not self:DeathEndRoundAllowed()) or (own and own.Role == "Murderer") then
-        self:CancelEndRoundSequence("Local murderer / disabled"); return false
+        self:CancelEndRoundSequence("Локальный убийца / выкл"); return false
     end
     local now, cycle = os.clock(), self.EndRoundCycle
-    local prefix = self.DeathEndRoundContext and "After death: " or "Bag full: "
-    if self.EndRoundRecovery then self.Status = prefix .. "restoring position"; return true end
+    local prefix = self.DeathEndRoundContext and "После смерти: " or "Сумка полная: "
+    if self.EndRoundRecovery then self.Status = prefix .. "восстановление позиции"; return true end
     if cycle and self:ObserveEndRound(cycle) then
-        self:StopEndRound("Server confirmed murderer death")
+        self:StopEndRound("Сервер подтвердил смерть убийцы")
         self:Transition("Confirming", "TargetDead")
-        self:Park(root, 0, prefix .. "murderer death confirmed; waiting for round end")
+        self:Park(root, 0, prefix .. "смерть убийцы подтверждена; ожидание конца раунда")
         return true
     end
     local target, targetCharacter, targetHumanoid, targetRoot = self:FindMurderer()
     if cycle and (cycle.Serial ~= self.RoundSerial or cycle.Map ~= self.Map
         or (target and (target ~= cycle.Player or targetCharacter ~= cycle.TargetCharacter))) then
-        self:CancelEndRoundSequence("Target context changed"); cycle = nil
+        self:CancelEndRoundSequence("Контекст цели изменился"); cycle = nil
     end
     if not cycle then
         cycle = {Serial = self.RoundSerial, Map = self.Map, Trigger = self.DeathEndRoundContext and "Death" or "BagFull",
@@ -1438,35 +1495,35 @@ function App:TryEndRound(character, root)
         self.EndRoundCycle = cycle
     elseif not cycle.Player and target then cycle.Player, cycle.TargetCharacter = target, targetCharacter end
     if not target then
-        self:StopEndRound("No live murderer")
-        self:Transition("Confirming", "Waiting for target / round end")
-        self:Park(root, 0, prefix .. "waiting for round end in safe zone"); return true
+        self:StopEndRound("Нет живого убийцы")
+        self:Transition("Confirming", "Ожидание цели / конца раунда")
+        self:Park(root, 0, prefix .. "ожидание конца раунда в безопасной зоне"); return true
     end
     if self.EndRoundAttempt then
         local attempt = self.EndRoundAttempt
         if attempt.Root ~= root or attempt.Character ~= character or attempt.TargetRoot ~= targetRoot then
-            self:StopEndRound("Character changed")
-        elseif now >= attempt.Deadline then self:StopEndRound("Contact window elapsed")
-        else self.Status = prefix .. "flinging murderer"; return true end
+            self:StopEndRound("Персонаж изменился")
+        elseif now >= attempt.Deadline then self:StopEndRound("Окно контакта истекло")
+        else self.Status = prefix .. "флинг убийцы"; return true end
     end
-    if self.EndRoundRecovery then self.Status = prefix .. "restoring position"; return true end
+    if self.EndRoundRecovery then self.Status = prefix .. "восстановление позиции"; return true end
     if now < cycle.ConfirmUntil then
-        self:Transition("Confirming", "Waiting for server result")
-        self:Park(root, 0, prefix .. "waiting for murderer death in safe zone"); return true
+        self:Transition("Confirming", "Ожидание результата сервера")
+        self:Park(root, 0, prefix .. "ожидание смерти убийцы в безопасной зоне"); return true
     end
     local humanoid = character:FindFirstChildOfClass("Humanoid")
     if not humanoid or humanoid.Sit or root.Anchored or targetHumanoid.Sit or not finiteFrame(targetRoot.CFrame) then
-        self:Transition("Confirming", "Invalid target")
-        self:Park(root, 0, prefix .. "waiting for a valid murderer"); return true
+        self:Transition("Confirming", "Неверная цель")
+        self:Park(root, 0, prefix .. "ожидание валидного убийцы"); return true
     end
     local offset = targetRoot.Position - self.BoundsFrame.Position
     local targetSpeed = (targetRoot.AssemblyLinearVelocity or Vector3.zero).Magnitude
     if math.abs(offset.X) > self.BoundsSize.X / 2 + 40 or math.abs(offset.Z) > self.BoundsSize.Z / 2 + 40
         or math.abs(offset.Y) > self.BoundsSize.Y / 2 + 100 or targetSpeed ~= targetSpeed or targetSpeed > 180 then
-        self:Transition("Confirming", "Waiting for target to settle")
-        self:Park(root, 0, prefix .. "waiting for murderer in safe zone"); return true
+        self:Transition("Confirming", "Ожидание стабилизации цели")
+        self:Park(root, 0, prefix .. "ожидание убийцы в безопасной зоне"); return true
     end
-    self:Transition("Contact", "Auto End Round")
+    self:Transition("Contact", "Авто-конец раунда")
     local attempt = {Player = target, TargetCharacter = targetCharacter, TargetRoot = targetRoot,
         TargetHumanoid = targetHumanoid, TargetPart = self:FlingContactPart(targetCharacter, targetRoot),
         Character = character, Humanoid = humanoid, Root = root, ReturnCFrame = root.CFrame,
@@ -1475,13 +1532,18 @@ function App:TryEndRound(character, root)
         InitialTargetPosition = targetRoot.Position, InitialSpeed = targetSpeed}
     self.EndRoundAttempt, self.AntiFlingStable = attempt, nil
     self:UpdateAntiFling()
-    self.Status = prefix .. "preparing contact"
+    self.Status = prefix .. "подготовка контакта"
     self:RunEndRoundWorker(attempt)
     return true
 end
 
 function App:Tick(dt)
     if not self.Running then return end
+    
+    if self.Settings.FarmEnabled then
+        self:PlayLayingEmote()
+    end
+
     if self.ReconnectPending then
         self:Transition("Reconnecting", self.ReconnectPending.Reason)
         self.Status = self.ReconnectStatus; return
@@ -1505,7 +1567,7 @@ function App:Tick(dt)
             self.SafeCFrame, self.SafeMap = nil, nil
         end
     end
-    if not self.Settings.FarmEnabled then self:Transition("Disabled", "Auto Farm off"); self.Status = "Disabled"; return end
+    if not self.Settings.FarmEnabled then self:Transition("Disabled", "Авто-фарм выкл"); self.Status = "Отключено"; return end
     self.ActiveElapsed = self.ActiveElapsed + dt
     if self:StepRoundStart(false) then return end
     if self.DeathEndRoundContext and not self:DeathEndRoundAllowed() then self:CancelDeathEndRound(false) end
@@ -1514,7 +1576,7 @@ function App:Tick(dt)
     local afterDeath = self.DeathEndRoundContext ~= nil
     if afterDeath then active, reason, character, humanoid, root = self:DeathEndRoundState() end
     if not active then
-        if reason ~= "Dead / respawning" and not afterDeath then self.DeathEligibleCharacter = nil end
+        if reason ~= "Мёртв / респавн" and not afterDeath then self.DeathEligibleCharacter = nil end
         self:ReleaseFlight(false)
         self:Transition(afterDeath and "WaitRespawn" or "WaitingRound", reason)
         self.Status = reason; return
@@ -1532,29 +1594,29 @@ function App:Tick(dt)
             self.Stats.Rounds = self.Stats.Rounds + 1
         end
     end
-    if now < self.PauseUntil then self:Transition("Cooldown", "Movement interrupted"); self.Status = "Movement correction: cooling down"; return end
+    if now < self.PauseUntil then self:Transition("Cooldown", "Движение прервано"); self.Status = "Коррекция движения: охлаждение"; return end
     if afterDeath or self.BagFull then
         if self.BagFull and not afterDeath and not self.FullHandled then
             self.FullHandled = true
             self.Stats.Bags = self.Stats.Bags + 1
-            if self.Webhook and self.Settings.WebhookOnFull then self.Webhook:Queue("Candy bag full") end
+            if self.Webhook and self.Settings.WebhookOnFull then self.Webhook:Queue("Сумка конфет заполнена") end
         end
         self:PrepareFlight(character, humanoid, root)
         if self:TryEndRound(character, root) then return end
-        self:Transition("Holding", "Full bag fallback")
+        self:Transition("Holding", "Резерв полной сумки")
         if not afterDeath and self.Settings.AutoReset then
-            self.Status = "Bag full: resetting"
+            self.Status = "Сумка полная: сброс"
             if not self.ResetRequested then
                 self.ResetRequested = true
                 self:ReleaseFlight(false)
                 humanoid.Health = 0
                 humanoid:ChangeState(Enum.HumanoidStateType.Dead)
             end
-        else self:Park(root, dt, "Bag full: waiting in safe zone") end
+        else self:Park(root, dt, "Сумка полная: ожидание в безопасной зоне") end
         return
     end
-    if self.EndRoundCycle or self.EndRoundAttempt then self:CancelEndRoundSequence("Candy farming resumed") end
-    self:Transition("Farming", "Candy collection")
+    if self.EndRoundCycle or self.EndRoundAttempt then self:CancelEndRoundSequence("Фарм конфет возобновлён") end
+    self:Transition("Farming", "Сбор конфет")
     local expected = self.Expected
     if self.Motion and self.Motion.Root == root then
         local motion = self.Motion
@@ -1568,7 +1630,7 @@ end
 
 function App:StepCandy(dt, root)
     local now = os.clock()
-    if self.ManualPark then self:Park(root, dt, "Safe zone: resume farm to continue"); return end
+    if self.ManualPark then self:Park(root, dt, "Безопасная зона: возобнови фарм для продолжения"); return end
     if now >= self.NextScan then
         self.NextScan = now + 0.75
         self:ScanCoins()
@@ -1588,7 +1650,7 @@ function App:StepCandy(dt, root)
             end
             if now < pause.Until then
                 self:Move(root, pause.Position)
-                self.Status = string.format("Collected: next flight in %.1fs", pause.Until - now)
+                self.Status = string.format("Собрано: следующий полёт через %.1fс", pause.Until - now)
                 return
             end
             self.HarvestPause = nil
@@ -1610,7 +1672,7 @@ function App:StepCandy(dt, root)
     if not target then
         self.WaitingPosition = self.WaitingPosition or root.Position
         self:Move(root, self.WaitingPosition)
-        self.Status = "Waiting for visible candies"
+        self.Status = "Ожидание видимых конфет"
         return
     end
     self.WaitingPosition = nil
@@ -1621,11 +1683,11 @@ function App:StepCandy(dt, root)
         self.BestDistance, self.ProgressAt = distance, now
     elseif not self.ArrivedAt and now - (self.ProgressAt or now) > 3 then
         self.Cooldowns[target], self.Target = now + 20, nil
-        self.Status = "Blocked route: choosing another candy"
+        self.Status = "Маршрут заблокирован: выбираю другую конфету"
         return
     end
     local arrived = self:Move(root, position)
-    self.Status = arrived and "Collecting candy" or "Flying to candy"
+    self.Status = arrived and "Сбор конфеты" or "Полёт к конфете"
     if arrived then
         self.LastSurface = CFrame.new(target.Position + Vector3.new(0, 3, 0))
         self.ArrivedAt = self.ArrivedAt or now
@@ -1660,6 +1722,7 @@ function App:Unload()
     self.Unloading = true
     self:CancelReconnect()
     self:FinishTouch()
+    self:StopEmote()
     self.Settings.WebhookURL = pendingWebhook(self) or self.Settings.WebhookURL
     self:SaveState()
     self:SetFarm(false)
@@ -1681,7 +1744,7 @@ local function createWebhook(App)
         or (type(syn) == "table" and type(syn.request) == "function" and syn.request)
         or (type(http) == "table" and type(http.request) == "function" and http.request)
         or (type(fluxus) == "table" and type(fluxus.request) == "function" and fluxus.request)
-    local Webhook = {Status = requestFn and "Off" or "HTTP unavailable", Sent = 0, Failed = 0}
+    local Webhook = {Status = requestFn and "Выкл" or "HTTP недоступен", Sent = 0, Failed = 0}
     local pending, closed, busy, generation = {}, false, false, 0
     local lastPeriodic = os.clock()
     local hosts = { ["discord.com"] = true, ["discordapp.com"] = true,
@@ -1709,7 +1772,7 @@ local function createWebhook(App)
     end
 
     local function text(value, limit)
-        return tostring(value or "Unknown"):sub(1, limit or 1000)
+        return tostring(value or "Неизвестно"):sub(1, limit or 1000)
     end
 
     local function payload(reason)
@@ -1718,48 +1781,48 @@ local function createWebhook(App)
         local hours = math.floor(elapsed / 3600)
         local minutes = math.floor(elapsed / 60) % 60
         local seconds = math.floor(elapsed) % 60
-        local playerName = App.Player and App.Player.Name or "Unknown"
+        local playerName = App.Player and App.Player.Name or "Неизвестно"
         return HttpService:JSONEncode({
             allowed_mentions = {parse = {}},
             embeds = {{
                 title = text(reason, 256),
-                description = "Player: ||" .. playerName .. "||",
-                color = 0xF4A340,
+                description = "Игрок: ||" .. playerName .. "||",
+                color = 0x00C8FF,
                 timestamp = DateTime.now():ToIsoDate(),
                 fields = {
-                    {name = "Game", value = text(App.GameName or "Murder Mystery 2"), inline = true},
-                    {name = "Map", value = text(snapshot.Map), inline = true},
+                    {name = "Игра", value = text(App.GameName or "Murder Mystery 2"), inline = true},
+                    {name = "Карта", value = text(snapshot.Map), inline = true},
                     {name = "Place", value = tostring(game.PlaceId), inline = true},
-                    {name = "Session candy", value = integer(snapshot.Collected), inline = true},
-                    {name = "Total candy", value = snapshot.TotalCandy ~= nil and integer(snapshot.TotalCandy) or "?", inline = true},
-                    {name = "Candy / hour", value = integer(snapshot.Rate), inline = true},
-                    {name = "Bag", value = integer(snapshot.BagCount) .. "/" .. (number(snapshot.BagCapacity) > 0 and integer(snapshot.BagCapacity) or "?"), inline = true},
-                    {name = "Full bags", value = integer(snapshot.Bags), inline = true},
-                    {name = "Rounds", value = integer(snapshot.Rounds), inline = true},
-                    {name = "Deaths", value = integer(snapshot.Deaths), inline = true},
-                    {name = "Uptime", value = string.format("%02d:%02d:%02d", hours, minutes, seconds), inline = true},
-                    {name = "Status", value = text(snapshot.Status), inline = false},
+                    {name = "Сессия конфет", value = integer(snapshot.Collected), inline = true},
+                    {name = "Всего конфет", value = snapshot.TotalCandy ~= nil and integer(snapshot.TotalCandy) or "?", inline = true},
+                    {name = "Конфет / час", value = integer(snapshot.Rate), inline = true},
+                    {name = "Сумка", value = integer(snapshot.BagCount) .. "/" .. (number(snapshot.BagCapacity) > 0 and integer(snapshot.BagCapacity) or "?"), inline = true},
+                    {name = "Полных сумок", value = integer(snapshot.Bags), inline = true},
+                    {name = "Раундов", value = integer(snapshot.Rounds), inline = true},
+                    {name = "Смертей", value = integer(snapshot.Deaths), inline = true},
+                    {name = "Время работы", value = string.format("%02d:%02d:%02d", hours, minutes, seconds), inline = true},
+                    {name = "Статус", value = text(snapshot.Status), inline = false},
                 },
-                footer = {text = "Halloween Candy Farm"},
+                footer = {text = "RNXhub Candy Farm"},
             }},
         })
     end
 
     function Webhook:Queue(reason, force)
-        if not active() then return false, "Stopped" end
-        if not force and not App.Settings.WebhookEnabled then return false, "Webhook is off" end
-        if not requestFn then self.Status = "HTTP unavailable"; return false, self.Status end
+        if not active() then return false, "Остановлено" end
+        if not force and not App.Settings.WebhookEnabled then return false, "Webhook выключен" end
+        if not requestFn then self.Status = "HTTP недоступен"; return false, self.Status end
         local url = target()
-        if not url then self.Status = "Invalid Discord webhook URL"; return false, self.Status end
-        if #pending >= 12 then self.Status = "Queue full"; return false, self.Status end
+        if not url then self.Status = "Неверный Discord webhook URL"; return false, self.Status end
+        if #pending >= 12 then self.Status = "Очередь заполнена"; return false, self.Status end
         local token = generation
-        local ok, body = pcall(payload, reason or (force and "Webhook test" or "Farm stats"))
-        if token ~= generation or not active() then return false, "Stopped" end
-        if not ok then self.Status = "Could not build message"; return false, self.Status end
-        if url ~= target() or (not force and not App.Settings.WebhookEnabled) then return false, "Settings changed" end
+        local ok, body = pcall(payload, reason or (force and "Тест webhook" or "Статистика фарма"))
+        if token ~= generation or not active() then return false, "Остановлено" end
+        if not ok then self.Status = "Не удалось создать сообщение"; return false, self.Status end
+        if url ~= target() or (not force and not App.Settings.WebhookEnabled) then return false, "Настройки изменены" end
         pending[#pending + 1] = {URL = url, Body = body, Force = force == true, Attempts = 0, NextAt = 0}
-        self.Status = "Queued (" .. #pending .. ")"
-        return true, "Queued"
+        self.Status = "В очереди (" .. #pending .. ")"
+        return true, "В очереди"
     end
 
     local function discard(item)
@@ -1774,7 +1837,7 @@ local function createWebhook(App)
             lastPeriodic = now
         elseif now - lastPeriodic >= interval then
             lastPeriodic = now
-            self:Queue("Farm stats")
+            self:Queue("Статистика фарма")
         end
         if not active() then return end
         while pending[1] and (pending[1].URL ~= target()
@@ -1783,17 +1846,17 @@ local function createWebhook(App)
         end
         local item = pending[1]
         if not item then
-            if not requestFn then self.Status = "HTTP unavailable"
-            elseif not target() then self.Status = "Paste Discord webhook URL"
-            elseif not App.Settings.WebhookEnabled then self.Status = "Off"
-            else self.Status = self.LastError or ("Ready | Sent " .. self.Sent) end
+            if not requestFn then self.Status = "HTTP недоступен"
+            elseif not target() then self.Status = "Вставь Discord webhook URL"
+            elseif not App.Settings.WebhookEnabled then self.Status = "Выкл"
+            else self.Status = self.LastError or ("Готов | Отправлено " .. self.Sent) end
             return
         end
         if now < item.NextAt then return end
         busy = true
         local token = generation
         item.Attempts = item.Attempts + 1
-        self.Status = "Sending"
+        self.Status = "Отправка"
         local ok, response = pcall(requestFn, {
             Url = item.URL, Method = "POST", Headers = {["Content-Type"] = "application/json"}, Body = item.Body,
         })
@@ -1807,17 +1870,17 @@ local function createWebhook(App)
                 retryAfter = math.clamp(number(data.retry_after), 0.5, 120)
             end)
             item.NextAt = os.clock() + retryAfter
-            self.Status = "Rate limited; retry in " .. math.ceil(retryAfter) .. "s"
+            self.Status = "Rate limit; повтор через " .. math.ceil(retryAfter) .. "с"
             return
         end
         discard(item)
         if code >= 200 and code < 300 then
             self.Sent = self.Sent + 1
             self.LastError = nil
-            self.Status = "Delivered | Sent " .. self.Sent
+            self.Status = "Доставлено | Отправлено " .. self.Sent
         else
             self.Failed = self.Failed + 1
-            self.LastError = code == 0 and "Request failed" or ("HTTP " .. tostring(code))
+            self.LastError = code == 0 and "Ошибка запроса" or ("HTTP " .. tostring(code))
             self.Status = self.LastError
         end
         if pending[1] then pending[1].NextAt = math.max(pending[1].NextAt, os.clock() + 0.6) end
@@ -1828,7 +1891,7 @@ local function createWebhook(App)
         closed = true
         generation = generation + 1
         table.clear(pending)
-        self.Status = "Stopped"
+        self.Status = "Остановлено"
     end
 
     return Webhook
@@ -1838,17 +1901,19 @@ local function buildInterface()
     local url = "https://raw.githubusercontent.com/PookiePepelsss/Airflow-UI/2910b3532195935a00dacb479a0ded50f1f38a0a/Source.luau"
     local Airflow = loadstring(game:HttpGet(url))()
     if not App.Running then return end
-    Airflow.Theme.Background = Color3.fromRGB(19, 17, 22)
-    Airflow.Theme.Surface = Color3.fromRGB(26, 22, 29)
-    Airflow.Theme.Surface2 = Color3.fromRGB(34, 28, 37)
-    Airflow.Theme.Surface3 = Color3.fromRGB(49, 38, 46)
-    Airflow.Theme.Stroke = Color3.fromRGB(52, 40, 52)
-    Airflow.Theme.Accent = Color3.fromRGB(255, 161, 75)
-    Airflow.Theme.AccentDark = Color3.fromRGB(45, 26, 14)
+
+    Airflow.Theme.Background = Color3.fromRGB(10, 10, 20)
+    Airflow.Theme.Surface = Color3.fromRGB(20, 20, 35)
+    Airflow.Theme.Surface2 = Color3.fromRGB(30, 30, 40)
+    Airflow.Theme.Surface3 = Color3.fromRGB(45, 45, 60)
+    Airflow.Theme.Stroke = Color3.fromRGB(0, 200, 255)
+    Airflow.Theme.Accent = Color3.fromRGB(0, 200, 255)
+    Airflow.Theme.AccentDark = Color3.fromRGB(0, 100, 150)
+
     local window = Airflow:CreateWindow({
-        Name = "MM2 Candy", Icon = "candy", Size = UDim2.fromOffset(610, 460),
+        Name = "RNXhub | MM2 Candy", Icon = "candy", Size = UDim2.fromOffset(610, 460),
         MinSize = Vector2.new(300, 240), ToggleUIKeybind = App.Settings.MenuKeybind,
-        OpenButton = {Title = "Candy", Icon = "candy"}, KeepOnScreen = true,
+        OpenButton = {Title = "RNXhub", Icon = "candy"}, KeepOnScreen = true,
         MaxNotifications = 4, Loading = false, ConfigurationSaving = {Enabled = false},
     })
     App.Window = window
@@ -1857,60 +1922,66 @@ local function buildInterface()
         if object.Image == Airflow.Assets.Glow or object.Image == Airflow.Assets.Shadow then object.Visible = false end
     end
     local building = true
-    local farm = window:CreateTab({Name = "Farm", Icon = "candy"})
-    local stats = window:CreateTab({Name = "Statistics", Icon = "chart-no-axes-combined"})
+    local farm = window:CreateTab({Name = "Фарм", Icon = "candy"})
+    local stats = window:CreateTab({Name = "Статистика", Icon = "chart-no-axes-combined"})
     local webhook = window:CreateTab({Name = "Webhook", Icon = "send"})
-    local settings = window:CreateTab({Name = "Settings", Icon = "settings"})
+    local settings = window:CreateTab({Name = "Настройки", Icon = "settings"})
+    
     local function toggle(tab, key, name, desc)
         App.Controls[key] = tab:CreateToggle({Name = name, Desc = desc, CurrentValue = App.Settings[key], Callback = function(value)
             if not building and App.Running then App:Set(key, value == true) end
         end})
     end
+    
     local function slider(tab, key, name, low, high, suffix)
         App.Controls[key] = tab:CreateSlider({Name = name, Range = {low, high}, Increment = 1,
             CurrentValue = App.Settings[key], Suffix = suffix, Callback = function(value)
                 if not building and App.Running then App:Set(key, finite(value, Defaults[key], low, high)) end
             end})
     end
+    
     local function live(tab, callback)
         return tab:CreateLabel({Text = callback(), UpdateRate = 0.5, Update = function()
-            return App.Running and callback() or "Stopped"
+            return App.Running and callback() or "Остановлено"
         end})
     end
+    
     local function copy(text)
         local fn = setclipboard or toclipboard
         local ok = type(fn) == "function" and pcall(fn, text)
-        App:Notify("Clipboard", ok and "Copied." or text, "Info")
+        App:Notify("Буфер обмена", ok and "Скопировано." or text, "Info")
     end
-    farm:CreateSection("Candy Farm")
-    toggle(farm, "FarmEnabled", "Auto Farm")
-    toggle(farm, "AutoReset", "Auto Reset")
-    toggle(farm, "AutoEndRound", "Auto End Round")
+
+    farm:CreateSection("Фарм конфет")
+    toggle(farm, "FarmEnabled", "Авто-фарм")
+    toggle(farm, "AutoReset", "Авто-сброс")
+    toggle(farm, "AutoEndRound", "Авто-конец раунда")
+    toggle(farm, "EmoteEnabled", "Эмоция при фарме", "Лежать во время фарма")
     live(farm, function() return App.Status end)
-    live(farm, function() return "Bag: " .. App.BagCount .. " / " .. (App.BagCapacity or "?") .. (App.BagFull and "  FULL" or "") end)
-    farm:CreateSection("Movement")
-    slider(farm, "TravelSpeed", "Tween Speed", 10, 100, " studs/s")
-    slider(farm, "UnderfloorDepth", "Underfloor Depth", 2, 6, " studs")
-    toggle(farm, "TouchAssist", "Touch Assist", "requires executor support")
+    live(farm, function() return "Сумка: " .. App.BagCount .. " / " .. (App.BagCapacity or "?") .. (App.BagFull and "  ПОЛНАЯ" or "") end)
+    farm:CreateSection("Движение")
+    slider(farm, "TravelSpeed", "Скорость полёта", 10, 100, " studs/s")
+    slider(farm, "UnderfloorDepth", "Глубина под полом", 2, 6, " studs")
+    toggle(farm, "TouchAssist", "Помощь касания", "требуется поддержка executor")
     if not App.TouchSupported then App:DisableTouchAssist() end
 
-    stats:CreateSection("Confirmed Candy Income")
-    live(stats, function() return "Session candy: " .. App.Stats.Collected end)
-    live(stats, function() return "Candy / hour: " .. math.floor(App:Snapshot().Rate) end)
-    live(stats, function() return "Total Halloween candy: " .. tostring(App:TotalCandy() or "?") end)
-    live(stats, function() return "Full bags: " .. App.Stats.Bags .. " | Rounds: " .. App.Stats.Rounds .. " | Deaths: " .. App.Stats.Deaths end)
-    live(stats, function() return "Movement corrections: " .. App.Stats.Corrections end)
+    stats:CreateSection("Подтверждённый доход конфет")
+    live(stats, function() return "Конфет за сессию: " .. App.Stats.Collected end)
+    live(stats, function() return "Конфет / час: " .. math.floor(App:Snapshot().Rate) end)
+    live(stats, function() return "Всего хэллоуинских конфет: " .. tostring(App:TotalCandy() or "?") end)
+    live(stats, function() return "Полных сумок: " .. App.Stats.Bags .. " | Раундов: " .. App.Stats.Rounds .. " | Смертей: " .. App.Stats.Deaths end)
+    live(stats, function() return "Коррекций движения: " .. App.Stats.Corrections end)
     live(stats, function()
         local elapsed = math.floor(os.clock() - App.StartedAt)
-        return string.format("Session: %02d:%02d:%02d | Map: %s", math.floor(elapsed / 3600), math.floor(elapsed / 60) % 60, elapsed % 60, App.Map and App.Map.Name or "Lobby")
+        return string.format("Сессия: %02d:%02d:%02d | Карта: %s", math.floor(elapsed / 3600), math.floor(elapsed / 60) % 60, elapsed % 60, App.Map and App.Map.Name or "Лобби")
     end)
-    stats:CreateButton({Name = "Reset Session Statistics", Icon = "rotate-ccw", Callback = function()
+    stats:CreateButton({Name = "Сбросить статистику сессии", Icon = "rotate-ccw", Callback = function()
         for key in pairs(App.Stats) do App.Stats[key] = 0 end
         App.StartedAt, App.ActiveElapsed = os.clock(), 0
     end})
 
-    webhook:CreateSection("Discord Reports")
-    toggle(webhook, "WebhookEnabled", "Enable Webhook")
+    webhook:CreateSection("Discord отчёты")
+    toggle(webhook, "WebhookEnabled", "Включить webhook")
     App.Controls.WebhookURL = webhook:CreateInput({Name = "Webhook URL", PlaceholderText = "https://discord.com/api/webhooks/...",
         CurrentValue = App.Settings.WebhookURL, MaxLength = 300, Callback = function(value)
             if not building then App:Set("WebhookURL", tostring(value):match("^%s*(.-)%s*$")) end
@@ -1925,40 +1996,42 @@ local function buildInterface()
             if App.Settings.WebhookURL ~= value then App:Set("WebhookURL", value) end
         end)
     end
-    slider(webhook, "WebhookInterval", "Report Interval", 1, 60, " min")
-    toggle(webhook, "WebhookOnFull", "Report Full Bags")
-    webhook:CreateButton({Name = "Send Test Report", Icon = "send", Callback = function()
-        local ok, message = App.Webhook:Queue("Webhook test", true)
-        App:Notify("Webhook", ok and "Test queued." or message, ok and "Success" or "Warning")
+    slider(webhook, "WebhookInterval", "Интервал отчёта", 1, 60, " мин")
+    toggle(webhook, "WebhookOnFull", "Отчёт о полной сумке")
+    webhook:CreateButton({Name = "Отправить тестовый отчёт", Icon = "send", Callback = function()
+        local ok, message = App.Webhook:Queue("Тест webhook", true)
+        App:Notify("Webhook", ok and "Тест в очереди." or message, ok and "Success" or "Warning")
     end})
-    live(webhook, function() return App.Webhook.Status .. " | Failed: " .. App.Webhook.Failed end)
-    settings:CreateSection("Session")
-    toggle(settings, "AntiAFK", "Anti AFK")
-    toggle(settings, "AntiFling", "Anti Fling")
-    toggle(settings, "AutoReconnect", "Auto Reconnect")
-    App.Controls.MenuKeybind = settings:CreateKeybind({Name = "Menu Keybind", CurrentKeybind = App.Settings.MenuKeybind,
+    live(webhook, function() return App.Webhook.Status .. " | Ошибок: " .. App.Webhook.Failed end)
+    settings:CreateSection("Сессия")
+    toggle(settings, "AntiAFK", "Анти-АФК")
+    toggle(settings, "AntiFling", "Анти-флинг")
+    toggle(settings, "AutoReconnect", "Авто-переподключение")
+    App.Controls.MenuKeybind = settings:CreateKeybind({Name = "Клавиша меню", CurrentKeybind = App.Settings.MenuKeybind,
         OnChanged = function(key)
             window:SetKeybind(key)
             if not building then App:Set("MenuKeybind", typeof(key) == "EnumItem" and key.Name or tostring(key)) end
         end})
-    settings:CreateButton({Name = "Stop All", Icon = "square", Callback = function()
+    settings:CreateButton({Name = "Стоп всё", Icon = "square", Callback = function()
         App:SetFarm(false)
-        App:Notify("Stopped", "Farm stopped. Anti AFK keeps its current setting.", "Info")
+        App:Notify("Остановлено", "Фарм остановлен. Анти-АФК сохраняет текущую настройку.", "Info")
     end})
-    settings:CreateButton({Name = "Unload", Icon = "power", Callback = function() App:Unload() end})
-    settings:CreateSection("Credits")
+    settings:CreateButton({Name = "Выгрузить", Icon = "power", Callback = function() App:Unload() end})
+    settings:CreateSection("Кредиты")
     local creditText
-    local credit = settings:CreateButton({Name = "Credits - loading...", Icon = "copy", Callback = function()
-        copy(creditText or "Bac0nHck")
+    local credit = settings:CreateButton({Name = "Кредиты - загрузка...", Icon = "copy", Callback = function()
+        copy(creditText or "@RUNEX_X_SCRIPT")
     end})
-    settings:CreateButton({Name = "UI Library - airflowlib.lol", Icon = "copy", Callback = function() copy("https://airflowlib.lol") end})
+    settings:CreateButton({Name = "Telegram: @RUNEX_X_SCRIPT", Icon = "copy", Callback = function() copy("https://t.me/RUNEX_X_SCRIPT") end})
+    settings:CreateButton({Name = "YouTube: @RUNEX_X_SCRIPT", Icon = "copy", Callback = function() copy("https://www.youtube.com/@RUNEX_X_SCRIPT") end})
+    settings:CreateButton({Name = "Discord: 86X8qTa5b", Icon = "copy", Callback = function() copy("https://discord.gg/86X8qTa5b") end})
+
     task.spawn(function()
-        local ok, value = pcall(function() return game:HttpGet("https://raw.githubusercontent.com/Bac0nHck/Something/refs/heads/main/telegram") end)
-        if not App.Running or window._destroyed then return end
-        value = ok and type(value) == "string" and value:match("^%s*(.-)%s*$") or ""
-        if value ~= "" and #value <= 200 and not value:find("[<>\r\n]") then creditText = value end
-        credit:SetText("Credits - " .. (creditText or "Bac0nHck"))
+        task.wait(1)
+        creditText = "@RUNEX_X_SCRIPT"
+        credit:SetText("Кредиты - @RUNEX_X_SCRIPT")
     end)
+
     function App:SyncControls()
         for key, control in pairs(self.Controls) do
             if self.Settings[key] ~= nil then control:Set(self.Settings[key], true) end
@@ -2056,11 +2129,11 @@ local function start()
         App.AcknowledgedCount = count
         if type(capacity) == "number" and capacity > 0 and capacity < math.huge then App.BagCapacity = capacity end
         App.BagFull = App.BagCapacity ~= nil and count >= App.BagCapacity
-        if App.BagFull then App:RequestEndRound("Bag full acknowledged")
+        if App.BagFull then App:RequestEndRound("Сумка полная подтверждена")
         elseif previous ~= nil and count > previous then App:BeginHarvestPause() end
     end)
     on("CoinsStarted", function()
-        App:CancelEndRoundSequence("New candies")
+        App:CancelEndRoundSequence("Новые конфеты")
         App.BagCount, App.BagCapacity, App.BagFull = 0, nil, false
         App.AcknowledgedCount = 0
         App.FullHandled, App.ResetRequested = false, false
@@ -2135,8 +2208,8 @@ local function start()
         if not ok then
             App.LastError = tostring(err)
             App:SetFarm(false)
-            warn("[MM2 Candy] " .. tostring(err))
-            App:Notify("Farm stopped", "Runtime error; details are in the executor console.", "Warning")
+            warn(tostring(err))
+            App:Notify("Фарм остановлен", "Ошибка выполнения; детали в консоли executor.", "Warning")
         end
     end)
     App:Connect(RunService.PreSimulation, function()
@@ -2146,8 +2219,8 @@ local function start()
             App:SetFarm(false)
             if os.clock() >= (App.NextPhysicsErrorNotice or 0) then
                 App.NextPhysicsErrorNotice = os.clock() + 10
-                warn("[MM2 Candy] Physics: " .. tostring(err))
-                App:Notify("Farm stopped", "Physics error; details are in the executor console.", "Warning")
+                warn("Physics: " .. tostring(err))
+                App:Notify("Фарм остановлен", "Ошибка физики; детали в консоли executor.", "Warning")
             end
         end
     end)
@@ -2163,19 +2236,19 @@ local function start()
                 local ok = App:SaveState()
                 if not ok and not App.SaveWarningShown then
                     App.SaveWarningShown = true
-                    App:Notify("Settings", "Remembered for this executor session. Disk saving is unavailable.", "Warning")
+                    App:Notify("Настройки", "Запомнено для этой сессии executor. Сохранение на диск недоступно.", "Warning")
                 end
             end
             task.wait(0.25)
         end
     end)
     App:SetFarm(App.Settings.FarmEnabled)
-    App:Notify("MM2 Candy", App.Settings.FarmEnabled and "Settings restored. Auto Farm resumed." or "Ready.", "Success")
+    App:Notify("RNXhub | MM2 Candy", App.Settings.FarmEnabled and "Настройки восстановлены. Авто-фарм возобновлён." or "Готов.", "Success")
 end
 
 local ok, err = xpcall(start, debug.traceback)
 if not ok then
     App.LastError = tostring(err)
     App:Unload()
-    warn("[MM2 Candy] Startup failed: " .. tostring(err))
+    warn("Ошибка запуска: " .. tostring(err))
 end
