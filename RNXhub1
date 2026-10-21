@@ -101,7 +101,6 @@ local App = {
     Flow = {Phase = "Waiting", Owner = nil, Epoch = 0, ChangedAt = os.clock()},
     ReturnTween = type(prior) == "table" and prior.ReturnTween or nil,
     CurrentEmoteTrack = nil,
-    FullState = "None"
 }
 Environment[Key] = App
 
@@ -217,7 +216,7 @@ local function sanitize(data)
         if type(data) == "table" and type(data[k]) == type(default) then settings[k] = data[k] end
     end
     settings.TravelSpeed = finite(settings.TravelSpeed, 55, 10, 100)
-    settings.UnderfloorDepth = finite(settings.UnderfloorDepth, 0, -15, 15)
+    settings.UnderfloorDepth = finite(settings.UnderfloorDepth, 0, -5, 5)
     settings.WebhookInterval = finite(settings.WebhookInterval, 10, 1, 60)
     local validKey, key = pcall(function() return Enum.KeyCode[settings.MenuKeybind] end)
     if not validKey or not key then settings.MenuKeybind = "RightControl" end
@@ -1059,7 +1058,6 @@ function App:ResetRound()
     self.Target, self.ManualPark, self.PauseUntil, self.WaitingPosition = nil, false, 0, nil
     self.LastSurface = nil
     self.DeathEligibleCharacter = nil
-    self.FullState = "None"
     table.clear(self.Cooldowns)
 end
 
@@ -1079,7 +1077,6 @@ function App:EndRound()
     self:ReleaseFlight(false)
     self:CancelEndRoundSequence("Раунд завершён")
     self:Transition("WaitingRound", "Раунд завершён")
-    self.FullState = "None"
 end
 
 local RouteCandidateLimit, RoutePasses, RouteEpsilon = 32, 2, 0.0001
@@ -1615,83 +1612,26 @@ function App:Tick(dt)
         end
     end
     if now < self.PauseUntil then self:Transition("Cooldown", "Движение прервано"); self.Status = "Коррекция движения: охлаждение"; return end
-    
-    if self.BagFull then
-        if not self.FullHandled then
+    if afterDeath or self.BagFull then
+        if self.BagFull and not afterDeath and not self.FullHandled then
             self.FullHandled = true
             self.Stats.Bags = self.Stats.Bags + 1
             if self.Webhook and self.Settings.WebhookOnFull then self.Webhook:Queue("Сумка конфет заполнена") end
-            self.FullState = "None"
         end
-        
-        if self.FullState == "None" then
-            self:CancelMove()
-            self:ResetPickup()
-            self:StopEmote()
-            self:ReleaseFlight(false)
-            
-            local entry = RoundData.PlayerData and RoundData.PlayerData[Player.Name]
-            local role = entry and entry.Role
-            
-            if role == "Sheriff" or role == "Hero" then
-                self.FullState = "Sheriff"
-            elseif role == "Murderer" then
-                self.FullState = "Murderer"
-            else
-                self.FullState = "Innocent"
-            end
-        end
-        
-        if self.FullState == "Sheriff" then
-            local target, targetChar, targetHum, targetRoot = self:FindMurderer()
-            if target and targetChar and targetHum and targetHum.Health > 0 then
-                local char, hum, r = self:GetCharacter()
-                if r and targetRoot then
-                    r.CFrame = targetRoot.CFrame * CFrame.new(0, 0, 2)
-                    if hum then
-                        local gun = char:FindFirstChildWhichIsA("Tool")
-                        if gun then gun:Activate() end
-                    end
-                end
-            else
-                self.FullState = "Done"
-            end
-            return
-        elseif self.FullState == "Murderer" then
-            for _, p in ipairs(Players:GetPlayers()) do
-                if p ~= Player and p.Character then
-                    local h = p.Character:FindFirstChildOfClass("Humanoid")
-                    if h then h.Health = 0 end
-                end
-            end
-            self.FullState = "Done"
-            return
-        elseif self.FullState == "Innocent" then
-            local target, targetChar, targetHum, targetRoot = self:FindMurderer()
-            if target and targetRoot and root then
-                root.CFrame = targetRoot.CFrame
-            end
-            local bv = Instance.new("BodyVelocity")
-            bv.MaxForce = Vector3.new(1e9, 1e9, 1e9)
-            bv.Velocity = Vector3.new(0, 1e9, 0)
-            bv.Parent = root
-            task.delay(1, function() if bv then bv:Destroy() end end)
-            self.FullState = "Done"
-            return
-        end
-        
-        if self.Settings.AutoReset then
-            self.Status = "Сумка полная: ресет"
+        self:PrepareFlight(character, humanoid, root)
+        if self:TryEndRound(character, root) then return end
+        self:Transition("Holding", "Резерв полной сумки")
+        if not afterDeath and self.Settings.AutoReset then
+            self.Status = "Сумка полная: сброс"
             if not self.ResetRequested then
                 self.ResetRequested = true
+                self:ReleaseFlight(false)
                 humanoid.Health = 0
+                humanoid:ChangeState(Enum.HumanoidStateType.Dead)
             end
-        else
-            self:Park(root, dt, "Сумка полная: ожидание")
-        end
+        else self:Park(root, dt, "Сумка полная: ожидание в безопасной зоне") end
         return
     end
-    
     if self.EndRoundCycle or self.EndRoundAttempt then self:CancelEndRoundSequence("Фарм конфет возобновлён") end
     self:Transition("Farming", "Сбор конфет")
     local expected = self.Expected
@@ -2037,7 +1977,7 @@ local function buildInterface()
     live(farm, function() return "Сумка: " .. App.BagCount .. " / " .. (App.BagCapacity or "?") .. (App.BagFull and "  ПОЛНАЯ" or "") end)
     farm:CreateSection("Движение")
     slider(farm, "TravelSpeed", "Скорость полёта", 10, 100, " studs/s")
-    slider(farm, "UnderfloorDepth", "Высота (0 = ровно)", -15, 15, " studs")
+    slider(farm, "UnderfloorDepth", "Высота (0 = ровно)", -5, 5, " studs")
     toggle(farm, "TouchAssist", "Помощь касания", "требуется поддержка executor")
     if not App.TouchSupported then App:DisableTouchAssist() end
 
