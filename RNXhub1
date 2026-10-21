@@ -94,8 +94,11 @@ local App = {
     BagCapacity = nil, BagFull = false, RoundBlocked = false, RoundSerial = 0,
     Map = nil, Target = nil, FullHandled = false, ResetRequested = false,
     PauseUntil = 0, NextScan = 0, NextRound = 0, DeathRecorded = false,
-    StorageRoot = Key, AccountRoot = Key .. "/" .. AccountId,
-    StatePath = Key .. "/" .. AccountId .. "/state.json",
+    
+    StorageRoot = "RNXhub",
+    AccountRoot = "RNXhub/config",
+    StatePath = "RNXhub/config/RNXConfig.json",
+    
     StateLoaded = false,
     DeathBootstrapAllowed = true,
     Flow = {Phase = "Waiting", Owner = nil, Epoch = 0, ChangedAt = os.clock()},
@@ -2265,3 +2268,9 @@ if not ok then
     App:Unload()
     warn("Ошибка запуска: " .. tostring(err))
 end
+print("=====================================")
+print("RNXhub | Социальные сети")
+print("Telegram: https://t.me/RUNEX_X_SCRIPT")
+print("YouTube:  https://www.youtube.com/@RUNEX_X_SCRIPT")
+print("Discord:  https://discord.gg/86X8qTa5b")
+print("=====================================")
