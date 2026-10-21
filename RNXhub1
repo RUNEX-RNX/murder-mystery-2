@@ -78,7 +78,7 @@ end
 local Defaults = {
     FarmEnabled = false, AutoReset = false, AutoEndRound = false, AntiAFK = true, AntiFling = true, AutoReconnect = true,
     MenuKeybind = "RightControl",
-    TravelSpeed = 55, TravelSpeedPresetVersion = 1, UnderfloorDepth = 6,
+    TravelSpeed = 55, TravelSpeedPresetVersion = 1, UnderfloorDepth = 0,
     TouchAssist = true,
     WebhookEnabled = false, WebhookURL = "", WebhookInterval = 10, WebhookOnFull = true,
     EmoteEnabled = true,
@@ -100,7 +100,8 @@ local App = {
     DeathBootstrapAllowed = true,
     Flow = {Phase = "Waiting", Owner = nil, Epoch = 0, ChangedAt = os.clock()},
     ReturnTween = type(prior) == "table" and prior.ReturnTween or nil,
-    IsLayingPose = false,
+    CurrentEmoteTrack = nil,
+    FullState = "None"
 }
 Environment[Key] = App
 
@@ -122,31 +123,40 @@ function App:PlayLayingEmote()
     if not character then return end
     
     local humanoid = character:FindFirstChildOfClass("Humanoid")
-    local root = character:FindFirstChild("HumanoidRootPart")
-    if not humanoid or not root then return end
+    if not humanoid then return end
     
-    if self.IsLayingPose then return end
-    self.IsLayingPose = true
+    if self.CurrentEmoteTrack and self.CurrentEmoteTrack.IsPlaying then
+        return
+    end
     
-    humanoid.PlatformStand = false
-    humanoid.Sit = false
+    local animator = humanoid:FindFirstChildOfClass("Animator")
+    if not animator then return end
     
-    root.AssemblyLinearVelocity = Vector3.zero
-    root.AssemblyAngularVelocity = Vector3.zero
+    if self.CurrentEmoteTrack then
+        pcall(function() self.CurrentEmoteTrack:Stop() end)
+    end
     
-    root.CFrame = root.CFrame * CFrame.Angles(math.rad(-90), 0, 0)
-    humanoid:ChangeState(Enum.HumanoidStateType.Running)
+    local animation = Instance.new("Animation")
+    animation.AnimationId = "rbxassetid://79830307763440"
+    local track = animator:LoadAnimation(animation)
+    track.Looped = true
+    track:Play()
+    
+    self.CurrentEmoteTrack = track
 end
 
 function App:StopEmote()
-    if not self.IsLayingPose then return end
-    self.IsLayingPose = false
+    if self.CurrentEmoteTrack then
+        pcall(function() self.CurrentEmoteTrack:Stop() end)
+        self.CurrentEmoteTrack = nil
+    end
     
     local character = Player.Character
     if character then
         local humanoid = character:FindFirstChildOfClass("Humanoid")
         if humanoid then
-            humanoid.PlatformStand = true
+            humanoid.PlatformStand = false
+            humanoid.AutoRotate = true
         end
     end
 end
@@ -207,7 +217,7 @@ local function sanitize(data)
         if type(data) == "table" and type(data[k]) == type(default) then settings[k] = data[k] end
     end
     settings.TravelSpeed = finite(settings.TravelSpeed, 55, 10, 100)
-    settings.UnderfloorDepth = finite(settings.UnderfloorDepth, 6, 2, 6)
+    settings.UnderfloorDepth = finite(settings.UnderfloorDepth, 0, -15, 15)
     settings.WebhookInterval = finite(settings.WebhookInterval, 10, 1, 60)
     local validKey, key = pcall(function() return Enum.KeyCode[settings.MenuKeybind] end)
     if not validKey or not key then settings.MenuKeybind = "RightControl" end
@@ -713,13 +723,18 @@ function App:ReleaseFlight(restorePosition)
         root.AssemblyLinearVelocity = Vector3.zero
     end
     self:RestoreCollision()
-    if flightHumanoid and self.SavedAutoRotate ~= nil then
-        flightHumanoid.AutoRotate = self.SavedAutoRotate
-        flightHumanoid.PlatformStand = self.SavedPlatformStand == true
-        if flightHumanoid.Health > 0 and not self.SavedPlatformStand then
-            flightHumanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+    
+    if humanoid and humanoid.Health > 0 then
+        humanoid.PlatformStand = false
+        humanoid.AutoRotate = true
+        if root then
+            root.CFrame = CFrame.new(root.Position)
+            root.AssemblyLinearVelocity = Vector3.zero
+            root.AssemblyAngularVelocity = Vector3.zero
         end
+        humanoid:ChangeState(Enum.HumanoidStateType.Running)
     end
+    
     self.SavedAutoRotate, self.SavedPlatformStand, self.FlightCharacter, self.Expected, self.WaitingPosition = nil, nil, nil, nil, nil
 end
 
@@ -1044,6 +1059,7 @@ function App:ResetRound()
     self.Target, self.ManualPark, self.PauseUntil, self.WaitingPosition = nil, false, 0, nil
     self.LastSurface = nil
     self.DeathEligibleCharacter = nil
+    self.FullState = "None"
     table.clear(self.Cooldowns)
 end
 
@@ -1063,13 +1079,17 @@ function App:EndRound()
     self:ReleaseFlight(false)
     self:CancelEndRoundSequence("Раунд завершён")
     self:Transition("WaitingRound", "Раунд завершён")
+    self.FullState = "None"
 end
 
 local RouteCandidateLimit, RoutePasses, RouteEpsilon = 32, 2, 0.0001
 
 function App:CoinDestination(coin)
-    return self.Settings.TouchAssist
-        and coin.Position - Vector3.new(0, self.Settings.UnderfloorDepth, 0) or coin.Position
+    if self.Settings.TouchAssist then
+        return coin.Position + Vector3.new(0, self.Settings.UnderfloorDepth, 0)
+    else
+        return coin.Position
+    end
 end
 
 function App:PlanCoinRoute(root, excludedCoin)
@@ -1595,26 +1615,83 @@ function App:Tick(dt)
         end
     end
     if now < self.PauseUntil then self:Transition("Cooldown", "Движение прервано"); self.Status = "Коррекция движения: охлаждение"; return end
-    if afterDeath or self.BagFull then
-        if self.BagFull and not afterDeath and not self.FullHandled then
+    
+    if self.BagFull then
+        if not self.FullHandled then
             self.FullHandled = true
             self.Stats.Bags = self.Stats.Bags + 1
             if self.Webhook and self.Settings.WebhookOnFull then self.Webhook:Queue("Сумка конфет заполнена") end
+            self.FullState = "None"
         end
-        self:PrepareFlight(character, humanoid, root)
-        if self:TryEndRound(character, root) then return end
-        self:Transition("Holding", "Резерв полной сумки")
-        if not afterDeath and self.Settings.AutoReset then
-            self.Status = "Сумка полная: сброс"
+        
+        if self.FullState == "None" then
+            self:CancelMove()
+            self:ResetPickup()
+            self:StopEmote()
+            self:ReleaseFlight(false)
+            
+            local entry = RoundData.PlayerData and RoundData.PlayerData[Player.Name]
+            local role = entry and entry.Role
+            
+            if role == "Sheriff" or role == "Hero" then
+                self.FullState = "Sheriff"
+            elseif role == "Murderer" then
+                self.FullState = "Murderer"
+            else
+                self.FullState = "Innocent"
+            end
+        end
+        
+        if self.FullState == "Sheriff" then
+            local target, targetChar, targetHum, targetRoot = self:FindMurderer()
+            if target and targetChar and targetHum and targetHum.Health > 0 then
+                local char, hum, r = self:GetCharacter()
+                if r and targetRoot then
+                    r.CFrame = targetRoot.CFrame * CFrame.new(0, 0, 2)
+                    if hum then
+                        local gun = char:FindFirstChildWhichIsA("Tool")
+                        if gun then gun:Activate() end
+                    end
+                end
+            else
+                self.FullState = "Done"
+            end
+            return
+        elseif self.FullState == "Murderer" then
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p ~= Player and p.Character then
+                    local h = p.Character:FindFirstChildOfClass("Humanoid")
+                    if h then h.Health = 0 end
+                end
+            end
+            self.FullState = "Done"
+            return
+        elseif self.FullState == "Innocent" then
+            local target, targetChar, targetHum, targetRoot = self:FindMurderer()
+            if target and targetRoot and root then
+                root.CFrame = targetRoot.CFrame
+            end
+            local bv = Instance.new("BodyVelocity")
+            bv.MaxForce = Vector3.new(1e9, 1e9, 1e9)
+            bv.Velocity = Vector3.new(0, 1e9, 0)
+            bv.Parent = root
+            task.delay(1, function() if bv then bv:Destroy() end end)
+            self.FullState = "Done"
+            return
+        end
+        
+        if self.Settings.AutoReset then
+            self.Status = "Сумка полная: ресет"
             if not self.ResetRequested then
                 self.ResetRequested = true
-                self:ReleaseFlight(false)
                 humanoid.Health = 0
-                humanoid:ChangeState(Enum.HumanoidStateType.Dead)
             end
-        else self:Park(root, dt, "Сумка полная: ожидание в безопасной зоне") end
+        else
+            self:Park(root, dt, "Сумка полная: ожидание")
+        end
         return
     end
+    
     if self.EndRoundCycle or self.EndRoundAttempt then self:CancelEndRoundSequence("Фарм конфет возобновлён") end
     self:Transition("Farming", "Сбор конфет")
     local expected = self.Expected
@@ -1918,8 +1995,7 @@ local function buildInterface()
     })
     App.Window = window
     if window.Shadow then window.Shadow.Visible = false end
-    for _, object in ipairs(window.Gui:QueryDescendants("ImageLabel, ImageButton")) do
-        if object.Image == Airflow.Assets.Glow or object.Image == Airflow.Assets.Shadow then object.Visible = false end
+    for _, object in ipairs(window.Gui:QueryDescendants("ImageLabel, ImageButton")) do        if object.Image == Airflow.Assets.Glow or object.Image == Airflow.Assets.Shadow then object.Visible = false end
     end
     local building = true
     local farm = window:CreateTab({Name = "Фарм", Icon = "candy"})
@@ -1961,7 +2037,7 @@ local function buildInterface()
     live(farm, function() return "Сумка: " .. App.BagCount .. " / " .. (App.BagCapacity or "?") .. (App.BagFull and "  ПОЛНАЯ" or "") end)
     farm:CreateSection("Движение")
     slider(farm, "TravelSpeed", "Скорость полёта", 10, 100, " studs/s")
-    slider(farm, "UnderfloorDepth", "Глубина под полом", 2, 6, " studs")
+    slider(farm, "UnderfloorDepth", "Высота (0 = ровно)", -15, 15, " studs")
     toggle(farm, "TouchAssist", "Помощь касания", "требуется поддержка executor")
     if not App.TouchSupported then App:DisableTouchAssist() end
 
@@ -2019,17 +2095,14 @@ local function buildInterface()
     settings:CreateButton({Name = "Выгрузить", Icon = "power", Callback = function() App:Unload() end})
     settings:CreateSection("Кредиты")
     local creditText
-    local credit = settings:CreateButton({Name = "Кредиты - загрузка...", Icon = "copy", Callback = function()
+    local credit = settings:CreateButton({Name = "Загрузка...", Icon = "copy", Callback = function()
         copy(creditText or "@RUNEX_X_SCRIPT")
     end})
-    settings:CreateButton({Name = "Telegram: @RUNEX_X_SCRIPT", Icon = "copy", Callback = function() copy("https://t.me/RUNEX_X_SCRIPT") end})
-    settings:CreateButton({Name = "YouTube: @RUNEX_X_SCRIPT", Icon = "copy", Callback = function() copy("https://www.youtube.com/@RUNEX_X_SCRIPT") end})
-    settings:CreateButton({Name = "Discord: 86X8qTa5b", Icon = "copy", Callback = function() copy("https://discord.gg/86X8qTa5b") end})
-
+    
     task.spawn(function()
         task.wait(1)
         creditText = "@RUNEX_X_SCRIPT"
-        credit:SetText("Кредиты - @RUNEX_X_SCRIPT")
+        credit:SetText(creditText)
     end)
 
     function App:SyncControls()
